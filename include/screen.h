@@ -4,19 +4,19 @@
 #include <U8g2lib.h>
 
 class Action;
+class DummyAction;
 class Adafruit_Sensor;
 
 class Screen {
-protected:
+public:
     bool redraw_request = false;
 
-public:
-    virtual void draw(U8G2 &u8g2) = 0;
     virtual void process_navigation(
         unsigned long button_select_press_duration,
         bool button_up_clicked,
         bool button_down_clicked
     ) = 0;
+    virtual void draw(U8G2 &u8g2, int offset_y) = 0;
     virtual bool is_menu();
     void request_redraw();
 };
@@ -35,31 +35,44 @@ public:
         bool button_up_clicked,
         bool button_down_clicked
     ) override;
-    void draw(U8G2 &u8g2) override;
+    void draw(U8G2 &u8g2, int offset_y) override;
     bool is_menu() override;
 };
 
 class Menu: public Screen {
 private:
-    const char **menu_items;
-    Action **item_actions;
-    unsigned item_count;
+    Action **items;
 
+protected:
+    unsigned item_count;
     int item_selected = 0;
     int item_sel_previous = -1;
     int item_sel_next = 1;
 
 public:
-    Menu(const char **menu_items, Action **item_actions, unsigned item_count);
+    Menu(Action **items, unsigned item_count);
     void process_navigation(
         unsigned long button_select_press_duration,
         bool button_up_clicked,
         bool button_down_clicked
     ) override;
-    void draw(U8G2 &u8g2) override;
+    void draw(U8G2 &u8g2, int offset_y) override;
     bool is_menu() override;
+};
 
-    Action *get_item_action();
+class RadioMenu: public Menu {
+private:
+    int radio_state = 0;
+
+public:
+    RadioMenu(DummyAction **items, unsigned item_count);
+    void process_navigation(
+        unsigned long button_select_press_duration,
+        bool button_up_clicked,
+        bool button_down_clicked
+    ) override;
+    void draw(U8G2 &u8g2, int offset_y) override;
+    bool is_menu() override;
 };
 
 #endif

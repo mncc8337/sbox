@@ -1,4 +1,3 @@
-#include "esp32-hal-gpio.h"
 #include <Arduino.h>
 #include <Wire.h>
 #include <esp_sleep.h>
@@ -13,13 +12,26 @@
 #define BUTTON_DOWN_PIN 1
 #define BUTTON_SELECT_PIN 4
 
+#define BATTERY_PIN 0
+
+enum BroascastType {
+    NOT_BROASCASTING,
+    BLE_BEACON,
+    BLE_SERVER,
+    WIFI,
+};
+
 bool button_up_clicked = false;
 bool button_select_clicked = false;
 bool button_down_clicked = false;
-unsigned long first_select_press_ts = 0;
 
-bool beacon_running = false;
+bool broadcasting = false;
+BroascastType broascast_type = NOT_BROASCASTING;
+
 bool screen_off = false;
+bool statusbar_redraw = false;
+uint32_t program_tick = 0;
+unsigned long idle_ts = 0;
 
 U8G2_SSD1306_128X64_NONAME_F_HW_I2C u8g2(U8G2_R0);
 
@@ -44,7 +56,7 @@ void turn_off_screen() {
 
     u8g2.setPowerSave(1);
 
-    if(!beacon_running) {
+    if(!broadcasting) {
         sleep_sensors();
         gpio_wakeup_enable((gpio_num_t)BUTTON_SELECT_PIN, GPIO_INTR_HIGH_LEVEL);
         esp_sleep_enable_gpio_wakeup();
@@ -82,12 +94,63 @@ void turn_on_screen() {
     screen_off = false;
 }
 
+const unsigned VOLTAGE_HISTORY_SIZE = 16;
+uint32_t psu_voltage_history[VOLTAGE_HISTORY_SIZE];
+uint32_t psu_voltage_sum = 0;
+#define PSU_VOLTAGE (psu_voltage_sum / VOLTAGE_HISTORY_SIZE)
+
+void update_psu_voltage() {
+    uint32_t raw = analogReadMilliVolts(BATTERY_PIN) * 2;
+
+    static uint32_t history_ptr = 0;
+    psu_voltage_sum += - psu_voltage_history[history_ptr] + raw;
+    psu_voltage_history[history_ptr++] = raw;
+    history_ptr %= VOLTAGE_HISTORY_SIZE;
+}
+
+void update_state() {
+    program_tick++;
+    if(program_tick >= (1 << 10)) {
+        program_tick = 0;
+
+        update_psu_voltage();
+
+        statusbar_redraw = true;
+    }
+}
+
+void clear_statusbar() {
+    u8g2.setDrawColor(0);
+    u8g2.drawBox(0, 0, 128 - 8, 5);
+    u8g2.setDrawColor(1);
+}
+
+void draw_statusbar() {
+    u8g2.setFont(u8g2_font_4x6_mf);
+
+    u8g2.setCursor(0, 5); u8g2.printf("%4dmV", PSU_VOLTAGE);
+}
+
+void draw_frame() {
+    u8g2.clearBuffer();
+
+    current_screen->draw(u8g2, 6);
+    draw_statusbar();
+
+    u8g2.sendBuffer();
+}
+
+#include <ble.h>
+
 void setup() {
     pinMode(BUTTON_UP_PIN, INPUT);
     pinMode(BUTTON_DOWN_PIN, INPUT);
     pinMode(BUTTON_SELECT_PIN, INPUT);
 
-    bool init_ok = true;
+    pinMode(BATTERY_PIN, INPUT);
+
+    for(unsigned i = 0; i < VOLTAGE_HISTORY_SIZE; i++)
+        update_psu_voltage();
 
     Wire.begin(SDA_PIN, SCL_PIN);
 
@@ -101,10 +164,10 @@ void setup() {
     }
 
     u8g2.clearBuffer();
-    u8g2.setFont(u8g2_font_4x6_tr);
-
     current_screen = &main_menu;
     current_screen->request_redraw();
+
+    ble_server_start();
 }
 
 void loop() {
@@ -112,8 +175,10 @@ void loop() {
     int button_up_state = digitalRead(BUTTON_UP_PIN);
     int button_down_state = digitalRead(BUTTON_DOWN_PIN);
 
+    static unsigned long first_select_press_ts = 0;
+
     unsigned long button_select_press_time = 0;
-    bool button_up_action = false; // lock these buttons when screen is off
+    bool button_up_action = false;
     bool button_down_action = false;
 
     if(button_select_state == HIGH && !button_select_clicked) {
@@ -154,6 +219,17 @@ void loop() {
         button_down_action = true;
     }
 
+    // actibity check
+    if(button_down_action || button_up_action || button_select_press_time) {
+        idle_ts = millis();
+        turn_on_screen();
+    } else if(millis() - idle_ts > 3 * 60000) {
+        idle_ts = millis(); // prevent sleeping again after waking up
+        turn_off_screen();
+    }
+
+    update_state();
+
     if(!screen_off) {
         current_screen->process_navigation(
             button_select_press_time,
@@ -161,11 +237,20 @@ void loop() {
             button_down_action
         );
 
-        current_screen->draw(u8g2);
+        if(current_screen->redraw_request) {
+            draw_frame();
+        } else if(statusbar_redraw) {
+            clear_statusbar();
+            draw_statusbar();
+            u8g2.sendBuffer();
+            statusbar_redraw = false;
+        }
     } else {
         if(button_select_press_time > 0) {
             turn_on_screen();
             current_screen->request_redraw();
         }
     }
+
+    delay(10);
 }

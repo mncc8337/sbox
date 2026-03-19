@@ -16,12 +16,12 @@ enum SensorEnum {
 
 extern Adafruit_Sensor *sensors[SENS_COUNT];
 
-bool init_sensors();
+extern bool init_sensors();
 
-void sleep_sensors();
-void wake_sensors();
+extern void sleep_sensors();
+extern void wake_sensors();
 
-void set_low_power_sensor_mode();
-void unset_low_power_sensor_mode();
+extern void set_low_power_sensor_mode();
+extern void unset_low_power_sensor_mode();
 
 #endif

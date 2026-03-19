@@ -1,15 +1,26 @@
 #include <action.h>
 #include <screen.h>
 
-ItemAction::ItemAction(void (*action)(void)) : action(action) {}
+extern void open_screen(Screen*);
 
-void ItemAction::execute() {
-    action();
+Action::Action(std::string name) : name(name) {};
+
+void Action::set_name(std::string new_name) {
+    name = new_name;
 }
 
-OpenScreenAction::OpenScreenAction(Screen *screen) : screen(screen) {}
+DummyAction::DummyAction(std::string name) : Action(name) {};
 
-extern void open_screen(Screen*);
+void DummyAction::execute() {};
+
+FunctionAction::FunctionAction(std::string name, void (*action_ptr)(void)) : Action(name), action_ptr(action_ptr) {}
+
+void FunctionAction::execute() {
+    action_ptr();
+}
+
+OpenScreenAction::OpenScreenAction(std::string name, Screen *screen) : Action(name), screen(screen) {}
+
 void OpenScreenAction::execute() {
     open_screen(screen);
 }

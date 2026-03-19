@@ -21,9 +21,7 @@ void SensorView::process_navigation(
     // }
 }
 
-void SensorView::draw(U8G2 &u8g2) {
-    if(!redraw_request) return;
-
+void SensorView::draw(U8G2 &u8g2, int offset_y) {
     if(!initialized) {
         sensor_t sensor_info;
         (*sensor_ptr)->getSensor(&sensor_info);
@@ -33,14 +31,12 @@ void SensorView::draw(U8G2 &u8g2) {
         initialized = true;
     }
 
-    u8g2.clearBuffer();
-
     sensors_event_t event;
     (*sensor_ptr)->getEvent(&event);
 
     u8g2.setFont(u8g2_font_glasstown_nbp_tf);
 
-    int y = FONT_HEIGHT;
+    int y = FONT_HEIGHT + offset_y;
 
     u8g2.setCursor(0, y); u8g2.printf("Name: %s", sensor_name); y += FONT_HEIGHT;
     // u8g2.setCursor(0, y); u8g2.printf("ID: %d", event.sensor_id); y += FONT_HEIGHT;
@@ -81,7 +77,6 @@ void SensorView::draw(U8G2 &u8g2) {
             break;
     }
 
-    u8g2.sendBuffer();
     // redraw_request = false;
 }
 
