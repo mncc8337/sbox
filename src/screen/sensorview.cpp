@@ -61,16 +61,25 @@ void SensorView::draw(U8G2 &u8g2, int offset_y) {
             u8g2.setCursor(0, y); u8g2.printf("Val: %.0f lx", event.light);
             break;
         case SENSOR_TYPE_ACCELEROMETER:
-            u8g2.setCursor(0, y); u8g2.print("Type: Accel"); y += FONT_HEIGHT;
-            u8g2.setCursor(0, y); u8g2.printf("X: %.2f", event.acceleration.x); y += FONT_HEIGHT;
-            u8g2.setCursor(0, y); u8g2.printf("Y: %.2f", event.acceleration.y); y += FONT_HEIGHT;
-            u8g2.setCursor(0, y); u8g2.printf("Z: %.2f", event.acceleration.z);
+            u8g2.setCursor(0, y);
+            u8g2.print("Type: Accel"); y += FONT_HEIGHT;
+            u8g2.setCursor(0, y);
+            u8g2.printf(
+                "xyz: m/s2 %.2f %.2f %.2f",
+                event.acceleration.x,
+                event.acceleration.y,
+                event.acceleration.z
+            );
+            y += FONT_HEIGHT;
             break;
         case SENSOR_TYPE_GYROSCOPE:
             u8g2.setCursor(0, y); u8g2.print("Type: Gyro"); y += FONT_HEIGHT;
-            u8g2.setCursor(0, y); u8g2.printf("X: %.2f", event.gyro.x); y += FONT_HEIGHT;
-            u8g2.setCursor(0, y); u8g2.printf("Y: %.2f", event.gyro.y); y += FONT_HEIGHT;
-            u8g2.setCursor(0, y); u8g2.printf("Z: %.2f", event.gyro.z);
+            u8g2.setCursor(0, y); u8g2.printf(
+                "xyz: rad/s %.2f %.2f %.2f",
+                event.gyro.x,
+                event.gyro.y,
+                event.gyro.z
+            ); y += FONT_HEIGHT;
             break;
         default:
             u8g2.setCursor(0, y); u8g2.print("No Data");
@@ -78,8 +87,4 @@ void SensorView::draw(U8G2 &u8g2, int offset_y) {
     }
 
     // redraw_request = false;
-}
-
-bool SensorView::is_menu() {
-    return false;
 }

@@ -2,6 +2,7 @@
 #define SCREEN_H
 
 #include <U8g2lib.h>
+#include <string>
 
 class Action;
 class DummyAction;
@@ -17,8 +18,24 @@ public:
         bool button_down_clicked
     ) = 0;
     virtual void draw(U8G2 &u8g2, int offset_y) = 0;
-    virtual bool is_menu();
+    virtual bool is_overlay();
     void request_redraw();
+};
+
+class Notification: public Screen {
+private:
+    std::string message;
+public:
+    Notification(std::string message);
+    void process_navigation(
+        unsigned long button_select_press_duration,
+        bool button_up_clicked,
+        bool button_down_clicked
+    ) override;
+    void draw(U8G2 &u8g2, int offset_y) override;
+    bool is_overlay() override;
+
+    void set_message(std::string new_message);
 };
 
 class SensorView: public Screen {
@@ -36,7 +53,6 @@ public:
         bool button_down_clicked
     ) override;
     void draw(U8G2 &u8g2, int offset_y) override;
-    bool is_menu() override;
 };
 
 class Menu: public Screen {
@@ -57,7 +73,6 @@ public:
         bool button_down_clicked
     ) override;
     void draw(U8G2 &u8g2, int offset_y) override;
-    bool is_menu() override;
 };
 
 class RadioMenu: public Menu {
@@ -72,7 +87,6 @@ public:
         bool button_down_clicked
     ) override;
     void draw(U8G2 &u8g2, int offset_y) override;
-    bool is_menu() override;
 };
 
 #endif

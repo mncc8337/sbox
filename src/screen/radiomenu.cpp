@@ -31,7 +31,3 @@ void RadioMenu::draw(U8G2 &u8g2, int offset_y) {
         u8g2.drawDisc(12, 4 + 22 * (radio_state - item_sel_previous) + offset_y, 2);
     }
 }
-
-bool RadioMenu::is_menu() {
-    return true;
-}

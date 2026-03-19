@@ -1,7 +1,7 @@
 #include <screen.h>
 #include <bitmap.h>
 
-bool Screen::is_menu() {
+bool Screen::is_overlay() {
     return false;
 }
 

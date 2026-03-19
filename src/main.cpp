@@ -132,15 +132,14 @@ void draw_statusbar() {
 }
 
 void draw_frame() {
-    u8g2.clearBuffer();
+    if(!current_screen->is_overlay())
+        u8g2.clearBuffer();
 
     current_screen->draw(u8g2, 6);
     draw_statusbar();
 
     u8g2.sendBuffer();
 }
-
-#include <ble.h>
 
 void setup() {
     pinMode(BUTTON_UP_PIN, INPUT);
@@ -166,8 +165,6 @@ void setup() {
     u8g2.clearBuffer();
     current_screen = &main_menu;
     current_screen->request_redraw();
-
-    ble_server_start();
 }
 
 void loop() {

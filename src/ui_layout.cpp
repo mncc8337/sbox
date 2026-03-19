@@ -23,21 +23,25 @@ RadioMenu connectivity_menu(
 );
 OpenScreenAction open_connectivity_menu("Connectivity", &connectivity_menu);
 
+Notification broadcast_notification("Started\nbroadcasting");
+
 void itemaction_broadcast() {
     extern FunctionAction broadcast;
-    extern Screen *current_screen;
+    extern void open_screen(Screen *screen);
 
     if(broadcasting) {
         ble_stop();
         broadcast.set_name("Broadcast");
+        broadcast_notification.set_message("Stopped\nbroadcasting");
         broadcasting = false;
     } else {
         ble_beacon_start();
         broadcast.set_name("Broadcasting");
+        broadcast_notification.set_message("Started\nbroadcasting");
         broadcasting = true;
     }
 
-    current_screen->redraw_request = true;
+    open_screen(&broadcast_notification);
 }
 FunctionAction broadcast("Broadcast", itemaction_broadcast);
 

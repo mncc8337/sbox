@@ -71,8 +71,3 @@ void Menu::draw(U8G2 &u8g2, int offset_y) {
 
     redraw_request = false;
 }
-
-bool Menu::is_menu() {
-    return true;
-}
-
