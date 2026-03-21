@@ -25,7 +25,7 @@ void Notification::process_navigation(
     }
 }
 
-void Notification::draw(U8G2 &u8g2, int offset_y) {
+void Notification::draw(U8G2 &u8g2) {
     u8g2.drawRBox(10, 10, 128 - 20, 64 - 20, 2);
     u8g2.setDrawColor(0);
     u8g2.drawRBox(12, 12, 128 - 24, 64 - 24, 2);

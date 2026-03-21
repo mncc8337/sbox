@@ -92,20 +92,23 @@ def parse_payload(raw_data):
     return results
 
 def detection_callback(device, advertisement_data):
-    if advertisement_data.local_name == "SBOX":
-        all_raw = bytearray()
-        for company_id, data in advertisement_data.manufacturer_data.items():
-            single_raw = bytearray()
-            single_raw.extend(company_id.to_bytes(2, byteorder='little'))
-            single_raw.extend(data)
-            all_raw += single_raw
-            
+    if advertisement_data.local_name != "SBOX":
+        return
+
+    mfg_data = advertisement_data.manufacturer_data
+    chunk1 = mfg_data.get(0xFFFF, b'')
+    
+    chunk2 = mfg_data.get(0xFEFF, b'')
+    
+    all_raw = chunk1 + chunk2
+        
+    if all_raw:
+        print(f"\n[+] CATCHED | MAC: {device.address} | RSSI: {advertisement_data.rssi} dBm")
+        print(f"    RAW: {all_raw.hex().upper()}")
+        
         decoded = parse_payload(all_raw)
-            
-        if decoded:
-            print(f"\n[+] CATCHED | MAC: {device.address} | RSSI: {advertisement_data.rssi} dBm")
-            for sensor, value in decoded.items():
-                print(f"    -> {sensor:20}: {value}")
+        for sensor, value in decoded.items():
+            print(f"    -> {sensor:20}: {value}")
 
 async def main():
     scanner = BleakScanner(

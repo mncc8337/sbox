@@ -2,8 +2,8 @@
 #include <action.h>
 #include <bitmap.h>
 
-Menu::Menu(Action **items, unsigned item_count)
-    : items(items),item_count(item_count) {}
+Menu::Menu(std::vector<Action*> &items)
+    : items((std::vector<Action*>&)items) {}
 
 void Menu::process_navigation(
     unsigned long button_select_press_duration,
@@ -13,13 +13,13 @@ void Menu::process_navigation(
     if(button_up_clicked) {
         item_selected = item_selected - 1;
         if(item_selected < 0) {
-            item_selected = this->item_count - 1;
+            item_selected = items.size() - 1;
         }
     }
 
     if(button_down_clicked) {
         item_selected = item_selected + 1;
-        if(item_selected >= item_count) {
+        if(item_selected >= items.size()) {
             item_selected = 0;
         }
     } 
@@ -35,7 +35,7 @@ void Menu::process_navigation(
         redraw_request = true;
 }
 
-void Menu::draw(U8G2 &u8g2, int offset_y) {
+void Menu::draw(U8G2 &u8g2) {
     // selected item background
     u8g2.drawXBMP(0, 22, 128, 21, BITMAP_ITEM_SEL_OUTLINE);
 
@@ -51,7 +51,7 @@ void Menu::draw(U8G2 &u8g2, int offset_y) {
     u8g2.drawStr(25, 15+20+2, items[item_selected]->name.c_str());
     // u8g2.drawXBMP(4, 24 + offset_y, 16, 16, bitmap_icons[item_selected]);
 
-    if(item_sel_next < item_count) {
+    if(item_sel_next < items.size()) {
         // draw next item as icon + label
         u8g2.setFont(u8g2_font_profont12_tf);
         u8g2.drawStr(25, 15+20+20+2+2, items[item_sel_next]->name.c_str());
@@ -59,14 +59,14 @@ void Menu::draw(U8G2 &u8g2, int offset_y) {
     }
 
     // draw scrollbar background
-    u8g2.drawXBMP(128-8, offset_y, 8, 64, BITMAP_SCROLLBAR_BACKGROUND);
+    u8g2.drawXBMP(128-8, 0, 8, 64, BITMAP_SCROLLBAR_BACKGROUND);
 
     // draw scrollbar handle
     u8g2.drawBox(
         125,
-        offset_y + (64 - offset_y)/this->item_count * item_selected,
+        64/items.size() * item_selected,
         3,
-        (64 - offset_y)/this->item_count
+        64/items.size()
     );
 
     redraw_request = false;

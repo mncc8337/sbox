@@ -3,6 +3,7 @@
 
 #include <U8g2lib.h>
 #include <string>
+#include <vector>
 
 class Action;
 class DummyAction;
@@ -19,8 +20,9 @@ public:
         bool button_up_clicked,
         bool button_down_clicked
     ) = 0;
-    virtual void draw(U8G2 &u8g2, int offset_y) = 0;
+    virtual void draw(U8G2 &u8g2) = 0;
     virtual bool is_overlay();
+    virtual bool prevent_sleep();
     void request_redraw();
 };
 
@@ -34,7 +36,7 @@ public:
         bool button_up_clicked,
         bool button_down_clicked
     ) override;
-    void draw(U8G2 &u8g2, int offset_y) override;
+    void draw(U8G2 &u8g2) override;
     bool is_overlay() override;
 
     void set_message(std::string new_message);
@@ -42,55 +44,65 @@ public:
 
 class SensorView: public Screen {
 private:
-    Adafruit_Sensor **sensor_ptr;
+    Adafruit_Sensor &sensor;
 
     char sensor_name[32];
     int32_t sensor_type;
-    bool initialized = false;
+    float max_sensor_value;
+    float min_sensor_value;
+    bool multi_axis;
+
+    bool graph_screen = false;
+    float graph_data[127];
+    unsigned graph_data_pos = 0;
+    unsigned axis = 0;
+    bool auto_scaling = false;
+
+    unsigned long sample_interval = 50;
+    unsigned long last_sampling_ts = 0;
 public:
-    SensorView(Adafruit_Sensor **sensor_ptr);
+    SensorView(Adafruit_Sensor &sensor);
     void process_navigation(
         unsigned long button_select_press_duration,
         bool button_up_clicked,
         bool button_down_clicked
     ) override;
-    void draw(U8G2 &u8g2, int offset_y) override;
+    void draw(U8G2 &u8g2) override;
+
+    bool prevent_sleep() override;
 };
 
 class Menu: public Screen {
-private:
-    Action **items;
-
 protected:
-    unsigned item_count;
+    std::vector<Action*> &items;
     int item_selected = 0;
     int item_sel_previous = -1;
     int item_sel_next = 1;
 
 public:
-    Menu(Action **items, unsigned item_count);
+    Menu(std::vector<Action*> &items);
     void process_navigation(
         unsigned long button_select_press_duration,
         bool button_up_clicked,
         bool button_down_clicked
     ) override;
-    void draw(U8G2 &u8g2, int offset_y) override;
+    void draw(U8G2 &u8g2) override;
 };
 
 class RadioMenu: public Menu {
 private:
     int radio_state = 0;
     int &bound_target;
-    const int *value_map;
+    std::vector<int> value_map;
 
 public:
-    RadioMenu(DummyAction **items, int &bound_target, const int *value_map, unsigned item_count);
+    RadioMenu(std::vector<DummyAction*> &items, int &bound_target, std::vector<int> value_map);
     void process_navigation(
         unsigned long button_select_press_duration,
         bool button_up_clicked,
         bool button_down_clicked
     ) override;
-    void draw(U8G2 &u8g2, int offset_y) override;
+    void draw(U8G2 &u8g2) override;
 };
 
 #endif

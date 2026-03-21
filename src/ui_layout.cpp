@@ -1,9 +1,10 @@
 #include <ui_layout.h>
+#include <U8g2lib.h>
 #include <screen.h>
 #include <action.h>
-#include <U8g2lib.h>
-#include <sensors.h>
 #include <connectivity.h>
+#include <sensors.h>
+#include <Adafruit_Sensor.h>
 
 extern bool broadcasting;
 extern U8G2 u8g2;
@@ -12,22 +13,21 @@ extern U8G2 u8g2;
 DummyAction ble_beacon_option("BLE Beacon");
 DummyAction ble_server_option("BLE Server");
 DummyAction wifi_option("WiFi");
-DummyAction *CONNECTIVITY_MENU_ITEMS[] = {
+std::vector<DummyAction*> connectivity_menu_items = {
     &ble_server_option,
     &ble_beacon_option,
     &wifi_option
 };
-const int connectivity_menu_item_map[] = {
+std::vector<int> connectivity_menu_item_map = {
     BLE_SERVER,
     BLE_BEACON,
     WIFI,
 };
 extern BroadcastType new_broadcast_type;
 RadioMenu connectivity_menu(
-    CONNECTIVITY_MENU_ITEMS,
+    connectivity_menu_items,
     (int&)new_broadcast_type,
-    connectivity_menu_item_map,
-    sizeof(CONNECTIVITY_MENU_ITEMS) / sizeof(Action*)
+    connectivity_menu_item_map
 );
 OpenScreenAction open_connectivity_menu("Connectivity", &connectivity_menu);
 
@@ -82,63 +82,42 @@ DummyAction open_screen_menu("Screen");
 DummyAction open_info_menu("Info");
 
 // system menu
-Action *SETTINGS_MENU_ITEMS[] = {
+std::vector<Action*> settings_menu_items = {
     &open_connectivity_menu,
     &open_battery_menu,
     &open_screen_menu,
     &open_info_menu,
 };
-Menu settings_menu(
-    SETTINGS_MENU_ITEMS,
-    sizeof(SETTINGS_MENU_ITEMS) / sizeof(Action*)
-);
+Menu settings_menu(settings_menu_items);
 OpenScreenAction open_settings_menu("Settings", &settings_menu);
 
-// ahtx0 view
-SensorView ahtx0_temperature_view(&sensors[SENS_AHTX0_TEMPERATURE]);
-OpenScreenAction open_ahtx0_temperature_view("AHTx0 Temp", &ahtx0_temperature_view);
-SensorView ahtx0_humidity_view(&sensors[SENS_AHTX0_HUMIDITY]);
-OpenScreenAction open_ahtx0_humidity_view("AHTx0 Humid", &ahtx0_humidity_view);
-
-// bmp280 view
-// SensorView bmp280_temperature_view(&sensors[SENS_BMP280_TEMPERATURE]);
-// OpenScreenAction open_bmp280_temperature_view("BMP280 Temp", &bmp280_temperature_view);
-SensorView bmp280_pressure_view(&sensors[SENS_BMP280_PRESSURE]);
-OpenScreenAction open_bmp280_pressure_view("BMP280 Press", &bmp280_pressure_view);
-
-// bh1750 view
-SensorView bh1750_view(&sensors[SENS_BH1750]);
-OpenScreenAction open_bh1750_view("BH1750", &bh1750_view);
-
-// bmi160 view
-SensorView bmi160_acceleration_view(&sensors[SENS_BMI160_ACCELERATION]);
-OpenScreenAction open_bmi160_acceleration_view("BMI160 Accel", &bmi160_acceleration_view);
-SensorView bmi160_gyroscope_view(&sensors[SENS_BMI160_GYROSCOPE]);
-OpenScreenAction open_bmi160_gyroscope_view("BMI160 Gyro", &bmi160_gyroscope_view);
-
 // sensor menu
-Action *SENSOR_DATA_MENU_ITEMS[] = {
-    // &open_bmp280_temperature_view,
-    &open_ahtx0_temperature_view,
-    &open_ahtx0_humidity_view,
-    &open_bmp280_pressure_view,
-    &open_bh1750_view,
-    &open_bmi160_acceleration_view,
-    &open_bmi160_gyroscope_view,
-};
-Menu sensor_data_menu(
-    SENSOR_DATA_MENU_ITEMS,
-    sizeof(SENSOR_DATA_MENU_ITEMS) / sizeof(Action*)
-);
+std::vector<Action*> sensor_data_menu_items;
+Menu sensor_data_menu(sensor_data_menu_items);
 OpenScreenAction open_sensor_data_menu("Sensor Data", &sensor_data_menu);
 
 // main menu
-Action *MAIN_MENU_ITEMS[] = {
+std::vector<Action*> main_menu_items = {
     &open_sensor_data_menu,
     &open_settings_menu,
     &broadcast,
 };
-Menu main_menu(
-    MAIN_MENU_ITEMS,
-    sizeof(MAIN_MENU_ITEMS) / sizeof(Action*)
-);
+Menu main_menu(main_menu_items);
+
+void ui_init() {
+    sensor_data_menu_items.reserve(SENS_COUNT);
+
+    for(unsigned i = 0; i < SENS_COUNT; i++) {
+        if(!SENSOR_ALIVE(i)) continue;
+
+        sensor_t sensor_info;
+        sensors[i]->getSensor(&sensor_info);
+        SensorView *sensor_view = new SensorView(*sensors[i]);
+        OpenScreenAction *open_sensor_view = new OpenScreenAction(
+            std::string(sensor_info.name),
+            sensor_view
+        );
+
+        sensor_data_menu_items.push_back(open_sensor_view);
+    }
+}

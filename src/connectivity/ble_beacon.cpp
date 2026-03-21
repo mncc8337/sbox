@@ -5,56 +5,14 @@
 #include <sensors.h>
 #include <Adafruit_Sensor.h>
 
-void ble_beacon_start() {
-    NimBLEAdvertising *advertising = NimBLEDevice::getAdvertising();
-    advertising->reset();
-    NimBLEAdvertisementData advertisement_data = NimBLEAdvertisementData();
-
-    advertisement_data.setName("SBOX");
-    // advertisement_data.setFlags(0x04); 
-    // advertisement_data.setAppearance(0x552);
-    // advertisement_data.addTxPower();
-
-    advertising->setAdvertisementData(advertisement_data);
-
-    advertising->setMinInterval(0xa0);
-    advertising->setMaxInterval(0x1e0);
-
-    advertising->start();
-}
-
-void ble_beacon_set_data(const std::vector<uint8_t> &data) {
-    NimBLEAdvertising *advertising = NimBLEDevice::getAdvertising();
-
-    NimBLEAdvertisementData advertisement_data = NimBLEAdvertisementData();
-    advertisement_data.setName("SBOX");
-    size_t first_chunk_size = std::min((size_t)19, data.size());
-    advertisement_data.setManufacturerData(data.data(), first_chunk_size);
-    advertising->setAdvertisementData(advertisement_data);
-
-    if(data.size() > 19) {
-    NimBLEAdvertisementData scan_response_data = NimBLEAdvertisementData();
-        const uint8_t* remaining_data = &data[19];
-        size_t remaining_size = data.size() - 19;
-        size_t second_chunk_size = std::min((size_t)27, remaining_size);
-        scan_response_data.setManufacturerData(remaining_data, second_chunk_size);
-        advertising->setScanResponseData(scan_response_data);
-    }
-}
-
-void ble_beacon_stop() {
-    NimBLEAdvertising *advertising = NimBLEDevice::getAdvertising();
-
-    if(advertising->isAdvertising())
-        advertising->stop();
-}
-
-
-void make_ble_beacon_payload(const sensors_data_t &data, std::vector<uint8_t>& payload) {
+static void make_ble_beacon_payload(const sensors_data_t &data, std::vector<uint8_t>& payload) {
     payload.clear();
 
+    payload.push_back(0xFF);
+    payload.push_back(0xFF);
+
     for(unsigned i = 0; i < SENS_COUNT; i++) {
-        if (!(data.active_mask & (1 << i))) continue;
+        if(!SENSOR_ALIVE(i)) continue;
 
         switch(i) {
             case SENS_AHTX0_TEMPERATURE: {
@@ -105,4 +63,54 @@ void make_ble_beacon_payload(const sensors_data_t &data, std::vector<uint8_t>& p
             }
         }
     }
+
+    if(payload.size() > 20) {
+        payload.insert(payload.begin() + 20, {0xFF, 0xFF});
+    }
+}
+
+void ble_beacon_start() {
+    NimBLEAdvertising *advertising = NimBLEDevice::getAdvertising();
+    advertising->reset();
+    NimBLEAdvertisementData advertisement_data = NimBLEAdvertisementData();
+
+    advertisement_data.setName("SBOX");
+    // advertisement_data.setFlags(0x04); 
+    // advertisement_data.setAppearance(0x552);
+    // advertisement_data.addTxPower();
+
+    advertising->setAdvertisementData(advertisement_data);
+
+    advertising->setMinInterval(0xa0);
+    advertising->setMaxInterval(0x1e0);
+
+    advertising->start();
+}
+
+void ble_beacon_set_data(const sensors_data_t &data) {
+    std::vector<uint8_t> payload;
+    payload.reserve(62);
+    make_ble_beacon_payload(data, payload);
+
+    NimBLEAdvertising *advertising = NimBLEDevice::getAdvertising();
+
+    NimBLEAdvertisementData advertisement_data = NimBLEAdvertisementData();
+    advertisement_data.setName("SBOX");
+    size_t first_chunk_size = std::min((size_t)20, payload.size());
+    advertisement_data.setManufacturerData(payload.data(), first_chunk_size);
+    advertising->setAdvertisementData(advertisement_data);
+
+    if(payload.size() > 20) {
+    NimBLEAdvertisementData scan_response_data = NimBLEAdvertisementData();
+        size_t remaining_size = payload.size() - 20;
+        scan_response_data.setManufacturerData(&payload[20], remaining_size);
+        advertising->setScanResponseData(scan_response_data);
+    }
+}
+
+void ble_beacon_stop() {
+    NimBLEAdvertising *advertising = NimBLEDevice::getAdvertising();
+
+    if(advertising->isAdvertising())
+        advertising->stop();
 }

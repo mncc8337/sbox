@@ -1,6 +1,8 @@
 #ifndef SENSORS_H
 #define SENSORS_H
 
+#define SENSOR_ALIVE(id) ((sensor_mask >> id) & 1)
+
 #include <stdint.h>
 
 class Adafruit_Sensor;
@@ -23,12 +25,14 @@ typedef struct {
     float light;
     float accel[3];
     float gyro[3];
-    uint16_t active_mask;
 } sensors_data_t;
 
 extern Adafruit_Sensor *sensors[SENS_COUNT];
+extern uint16_t sensor_mask;
 
-extern bool init_sensors();
+extern const char* get_sensor_type_string(const int &type);
+extern const char* get_sensor_unit_string(const int type);
+extern uint16_t init_sensors();
 
 extern void sleep_sensors();
 extern void wake_sensors();

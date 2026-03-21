@@ -1,3 +1,4 @@
+#include "esp32-hal-gpio.h"
 #include <Arduino.h>
 #include <Wire.h>
 #include <esp_sleep.h>
@@ -23,8 +24,9 @@ bool broadcasting = false;
 BroadcastType broadcast_type = BLE_SERVER;
 BroadcastType new_broadcast_type = BLE_SERVER;
 
+bool sleep_lock = false;
+
 bool screen_off = false;
-bool statusbar_redraw = false;
 uint32_t program_tick = 0;
 unsigned long idle_ts = 0;
 
@@ -39,6 +41,8 @@ void open_screen(Screen *screen) {
     screen_stack[screen_stack_ptr++] = current_screen;
     current_screen = screen;
     current_screen->request_redraw();
+
+    sleep_lock = current_screen->prevent_sleep();
 }
 void open_prev_screen() {
     if(!screen_stack_ptr) return;
@@ -47,7 +51,7 @@ void open_prev_screen() {
 }
 
 void turn_off_screen() {
-    if(screen_off) return;
+    if(screen_off || sleep_lock) return;
 
     u8g2.setPowerSave(1);
 
@@ -77,7 +81,7 @@ void turn_off_screen() {
 }
 
 void turn_on_screen() {
-    if(!screen_off) return;
+    if(!screen_off || sleep_lock) return;
 
     // if this func get called
     // that mean beacom mode is not running
@@ -121,9 +125,6 @@ void update_state() {
         update_battery_readings();
         if(PSU_VOLTAGE < 3400)
             esp_deep_sleep_start();
-
-        statusbar_redraw = true;
-
     }
     if(!(program_tick % (1 << 4)) && broadcasting) {
         sensors_data_t data;
@@ -131,9 +132,7 @@ void update_state() {
         
         switch(broadcast_type) {
             case BLE_BEACON: {
-                std::vector<uint8_t> payload; payload.reserve(64);
-                make_ble_beacon_payload(data, payload);
-                ble_beacon_set_data(payload);
+                ble_beacon_set_data(data);
                 break;
             }
             case BLE_SERVER: {
@@ -147,30 +146,7 @@ void update_state() {
     program_tick %= (1<<10);
 }
 
-void clear_statusbar() {
-    u8g2.setDrawColor(0);
-    u8g2.drawBox(0, 0, 128 - 8, 5);
-    u8g2.setDrawColor(1);
-}
-
-void draw_statusbar() {
-    u8g2.setFont(u8g2_font_4x6_mf);
-
-    u8g2.setCursor(0, 5); u8g2.printf("BAT %4dmV %2d%%", PSU_VOLTAGE, battery_percentage);
-    if(broadcasting) {
-        u8g2.setCursor(128 - 12 * 3 - 11, 5);
-        u8g2.print("BROADCASTING");
-    }
-}
-
 void draw_frame() {
-    if(!current_screen->is_overlay())
-        u8g2.clearBuffer();
-
-    current_screen->draw(u8g2, 6);
-    draw_statusbar();
-
-    u8g2.sendBuffer();
 }
 
 void setup() {
@@ -190,18 +166,31 @@ void setup() {
     u8g2.setBitmapMode(1);
     u8g2.clear();
 
-    if(!init_sensors()) {
-        u8g2.printf("failed to init some sensors");
-        while(1);
+    if(init_sensors() != (1 << SENS_COUNT) - 1) {
+        u8g2.setFont(u8g2_font_4x6_tf);
+        u8g2.setCursor(0, 5); u8g2.printf("failed to init some sensors");
+        u8g2.setCursor(0, 5 * 2 + 2 * 1); u8g2.printf("sensor mask: 0x%X", sensor_mask);
+        u8g2.setCursor(0, 5 * 3 + 2 * 2); u8g2.printf("press SELECT to continue");
+        u8g2.sendBuffer();
+
+        while(digitalRead(BUTTON_SELECT_PIN) == LOW)
+            delay(10);
     }
 
+    while(digitalRead(BUTTON_SELECT_PIN) == HIGH)
+        delay(10);
+
     ble_init();
+
+    ui_init();
 
     current_screen = &main_menu;
     current_screen->request_redraw();
 }
 
 void loop() {
+    update_state();
+
     int button_select_state = digitalRead(BUTTON_SELECT_PIN);
     int button_up_state = digitalRead(BUTTON_UP_PIN);
     int button_down_state = digitalRead(BUTTON_DOWN_PIN);
@@ -225,7 +214,7 @@ void loop() {
         // global event
         if(button_select_press_time >= 5000) {
             turn_off_screen();
-        } else if(button_select_press_time >= 400) {
+        } else if(button_select_press_time >= 300) {
             open_prev_screen();
         } else {
             event_consumed = false;
@@ -250,17 +239,6 @@ void loop() {
         button_down_action = true;
     }
 
-    // activity check
-    if(button_down_action || button_up_action || button_select_press_time) {
-        idle_ts = millis();
-        turn_on_screen();
-    } else if(millis() - idle_ts > 3 * 60000) {
-        idle_ts = millis(); // prevent sleeping again after waking up
-        turn_off_screen();
-    }
-
-    update_state();
-
     if(!screen_off) {
         current_screen->process_navigation(
             button_select_press_time,
@@ -269,18 +247,25 @@ void loop() {
         );
 
         if(current_screen->redraw_request) {
-            draw_frame();
-        } else if(statusbar_redraw) {
-            clear_statusbar();
-            draw_statusbar();
+            if(!current_screen->is_overlay())
+                u8g2.clearBuffer();
+            current_screen->draw(u8g2);
             u8g2.sendBuffer();
-            statusbar_redraw = false;
         }
     } else {
         if(button_select_press_time > 0) {
             turn_on_screen();
             current_screen->request_redraw();
         }
+    }
+
+    // activity check
+    if(button_down_action || button_up_action || button_select_press_time) {
+        idle_ts = millis();
+        turn_on_screen();
+    } else if(millis() - idle_ts > 3 * 60000) {
+        idle_ts = millis(); // prevent sleeping again after waking up
+        turn_off_screen();
     }
 
     delay(10);

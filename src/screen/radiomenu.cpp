@@ -2,8 +2,8 @@
 #include <action.h>
 #include <bitmap.h>
 
-RadioMenu::RadioMenu(DummyAction **items, int &bound_target, const int *value_map, unsigned item_count)
-    : Menu((Action**)items, item_count),
+RadioMenu::RadioMenu(std::vector<DummyAction*> &items, int &bound_target, std::vector<int> value_map)
+    : Menu((std::vector<Action*> &)items),
       bound_target(bound_target),
       value_map(value_map) {}
 
@@ -21,16 +21,16 @@ void RadioMenu::process_navigation(
     }
 }
 
-void RadioMenu::draw(U8G2 &u8g2, int offset_y) {
-    Menu::draw(u8g2, offset_y);
+void RadioMenu::draw(U8G2 &u8g2) {
+    Menu::draw(u8g2);
 
     if(item_sel_previous >= 0)
-        u8g2.drawCircle(12, 4 + offset_y, 4);
-    u8g2.drawCircle(12, 26 + offset_y, 4);
-    if(item_sel_next < item_count)
-        u8g2.drawCircle(12, 48 + offset_y, 4);
+        u8g2.drawCircle(12, 10, 4);
+    u8g2.drawCircle(12, 32, 4);
+    if(item_sel_next < items.size())
+        u8g2.drawCircle(12, 54, 4);
 
     if(radio_state >= item_sel_previous && radio_state <= item_sel_next) {
-        u8g2.drawDisc(12, 4 + 22 * (radio_state - item_sel_previous) + offset_y, 2);
+        u8g2.drawDisc(12, 10 + 22 * (radio_state - item_sel_previous), 2);
     }
 }

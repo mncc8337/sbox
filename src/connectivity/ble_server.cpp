@@ -84,14 +84,13 @@ void ble_server_start() {
     advertising->start();
 }
 
-void ble_server_update(const sensors_data_t &data, uint8_t bat_level) {
+void ble_server_update(const sensors_data_t &data, const uint8_t bat_level) {
     if(!device_connected) return; 
 
     std::vector<uint8_t> data_to_send;
 
     for(unsigned i = 0; i < SENS_COUNT; i++) {
-        // Nếu cảm biến đéo có data thì bỏ qua
-        if (!(data.active_mask & (1 << i))) continue; 
+        if (!SENSOR_ALIVE(i)) continue; 
         
         data_to_send.clear();
 

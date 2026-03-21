@@ -5,4 +5,6 @@
 
 extern Menu main_menu;
 
+extern void ui_init();
+
 #endif
