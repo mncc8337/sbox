@@ -26,6 +26,16 @@ public:
     void request_redraw();
 };
 
+class SplashScreen: public Screen {
+public:
+    void process_navigation(
+        unsigned long button_select_press_duration,
+        bool button_up_clicked,
+        bool button_down_clicked
+    );
+    void draw(U8G2 &u8g2);
+};
+
 class Notification: public Screen {
 private:
     std::string message;

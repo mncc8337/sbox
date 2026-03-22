@@ -166,10 +166,14 @@ std::vector<Action*> sensor_data_menu_items;
 Menu sensor_data_menu(sensor_data_menu_items, 0);
 OpenScreenAction open_sensor_data_menu("Sensor Data", &sensor_data_menu);
 
+SplashScreen splash_screen;
+OpenScreenAction open_splash_screen("Splash GIF", &splash_screen);
+
 std::vector<Action*> main_menu_items = {
     &open_sensor_data_menu,
     &open_settings_menu,
     &broadcast,
+    &open_splash_screen
 };
 Menu main_menu(main_menu_items, 0);
 
