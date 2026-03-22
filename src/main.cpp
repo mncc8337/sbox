@@ -1,8 +1,8 @@
-#include "esp32-hal-gpio.h"
 #include <Arduino.h>
 #include <Wire.h>
 #include <esp_sleep.h>
 
+#include <bitmap.h>
 #include <sensors.h>
 #include <ui_layout.h>
 #include <connectivity.h>
@@ -16,19 +16,12 @@
 
 #define BATTERY_PIN 0
 
-bool button_up_clicked = false;
-bool button_select_clicked = false;
-bool button_down_clicked = false;
-
 bool broadcasting = false;
 BroadcastType broadcast_type = BLE_SERVER;
 BroadcastType new_broadcast_type = BLE_SERVER;
 
 bool sleep_lock = false;
-
 bool screen_off = false;
-uint32_t program_tick = 0;
-unsigned long idle_ts = 0;
 
 U8G2_SSD1306_128X64_NONAME_F_HW_I2C u8g2(U8G2_R0);
 
@@ -63,7 +56,13 @@ void turn_off_screen() {
         // wait for button release
         while(digitalRead(BUTTON_SELECT_PIN) != LOW) delay(10);
 
+        Wire.end();
+        pinMode(SDA_PIN, INPUT);
+        pinMode(SCL_PIN, INPUT);
+
         esp_light_sleep_start();
+
+        Wire.begin(SDA_PIN, SCL_PIN);
 
         // the esp wakes up right there
         // also wait for button release
@@ -91,6 +90,14 @@ void turn_on_screen() {
     u8g2.setPowerSave(0);
 
     screen_off = false;
+}
+
+void emergency_shutdown() {
+    u8g2.setPowerSave(1);
+    Wire.end();
+    pinMode(SDA_PIN, INPUT);
+    pinMode(SCL_PIN, INPUT);
+    esp_deep_sleep_start();
 }
 
 const unsigned VOLTAGE_HISTORY_SIZE = 16;
@@ -124,37 +131,6 @@ void update_battery_readings() {
     }
 }
 
-void update_state() {
-    program_tick++;
-    if(!(program_tick % (1 << 10))) {
-
-        update_battery_readings();
-        if(psu_voltage_avg < 3400)
-            esp_deep_sleep_start();
-    }
-    if(!(program_tick % (1 << 4)) && broadcasting) {
-        sensors_data_t data;
-        get_sensors_data(data);
-        
-        switch(broadcast_type) {
-            case BLE_BEACON: {
-                ble_beacon_set_data(data);
-                break;
-            }
-            case BLE_SERVER: {
-                ble_server_update(data, battery_percentage);
-                break;
-            }
-            default:;
-        }
-    }
-
-    program_tick %= (1<<10);
-}
-
-void draw_frame() {
-}
-
 void setup() {
     pinMode(BUTTON_UP_PIN, INPUT);
     pinMode(BUTTON_DOWN_PIN, INPUT);
@@ -167,10 +143,8 @@ void setup() {
 
     Wire.begin(SDA_PIN, SCL_PIN);
 
-    u8g2.setColorIndex(1);
     u8g2.begin();
     u8g2.setBitmapMode(1);
-    u8g2.clear();
 
     if(init_sensors() != (1 << SENS_COUNT) - 1) {
         u8g2.setFont(u8g2_font_4x6_tf);
@@ -187,15 +161,54 @@ void setup() {
         delay(10);
 
     ble_init();
-
     ui_init();
+
+    // splash image
+    u8g2.drawXBMP(0, 0, 128, 64, BITMAP_SPLASH_IMAGE);
+    u8g2.sendBuffer();
+    delay(2000);
 
     current_screen = &main_menu;
     current_screen->request_redraw();
 }
 
 void loop() {
-    update_state();
+    static long unsigned last_battery_update_ts = 0;
+    static long unsigned last_sensor_update_ts = 0;
+
+    const long unsigned current_ts = millis();
+
+    if(current_ts - last_battery_update_ts > 3000) {
+        update_battery_readings();
+        if(psu_voltage_avg < 3400)
+            emergency_shutdown();
+        last_battery_update_ts = current_ts;
+    }
+
+    if(current_ts - last_sensor_update_ts > 10 && broadcasting) {
+        long unsigned measure_time = current_ts;
+        sensors_data_t sensors_data;
+        get_sensors_data(sensors_data);
+        
+        switch(broadcast_type) {
+            case BLE_BEACON: {
+                ble_beacon_set_data(sensors_data);
+                break;
+            }
+            case BLE_SERVER: {
+                ble_server_update(sensors_data, battery_percentage);
+                break;
+            }
+            default:;
+        }
+
+        last_sensor_update_ts = current_ts;
+        printf("Measure time: %dms\n", current_ts - measure_time);
+    }
+
+    static bool button_up_clicked = false;
+    static bool button_select_clicked = false;
+    static bool button_down_clicked = false;
 
     int button_select_state = digitalRead(BUTTON_SELECT_PIN);
     int button_up_state = digitalRead(BUTTON_UP_PIN);
@@ -209,10 +222,10 @@ void loop() {
 
     if(button_select_state == HIGH && !button_select_clicked) {
         button_select_clicked = true;
-        first_select_press_ts = millis();
+        first_select_press_ts = current_ts;
     }
     if(button_select_state == LOW && button_select_clicked) { 
-        button_select_press_time = millis() - first_select_press_ts;
+        button_select_press_time = current_ts - first_select_press_ts;
         button_select_clicked = false;
 
         bool event_consumed = true;
@@ -266,13 +279,14 @@ void loop() {
     }
 
     // activity check
+    static long unsigned idle_ts = 0;
     if(button_down_action || button_up_action || button_select_press_time) {
-        idle_ts = millis();
+        idle_ts = current_ts;
         turn_on_screen();
-    } else if(millis() - idle_ts > 3 * 60000) {
-        idle_ts = millis(); // prevent sleeping again after waking up
+    } else if(current_ts - idle_ts > 3 * 60000) {
+        idle_ts = current_ts; // prevent sleeping again after waking up
         turn_off_screen();
     }
 
-    delay(10);
+    delay(1);
 }

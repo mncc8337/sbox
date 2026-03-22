@@ -10,8 +10,8 @@ extern bool broadcasting;
 extern U8G2 u8g2;
 
 // connectivity menu
-DummyAction ble_beacon_option("BLE Beacon");
 DummyAction ble_server_option("BLE Server");
+DummyAction ble_beacon_option("BLE Beacon");
 DummyAction wifi_option("WiFi");
 std::vector<DummyAction*> connectivity_menu_items = {
     &ble_server_option,
@@ -31,7 +31,7 @@ RadioMenu connectivity_menu(
 );
 OpenScreenAction open_connectivity_menu("Connectivity", &connectivity_menu);
 
-void itemaction_broadcast() {
+void functionaction_broadcast() {
     extern FunctionAction broadcast;
     extern BroadcastType broadcast_type;
 
@@ -73,7 +73,7 @@ void itemaction_broadcast() {
         broadcasting = true;
     }
 }
-FunctionAction broadcast("Broadcast", itemaction_broadcast);
+FunctionAction broadcast("Broadcast", functionaction_broadcast);
 
 DummyAction open_screen_menu("Screen");
 
@@ -105,11 +105,13 @@ Menu main_menu(main_menu_items);
 void ui_init() {
     sensor_data_menu_items.reserve(SENS_COUNT);
 
+    extern sensors_data_t sensors_data;
     for(unsigned i = 0; i < SENS_COUNT; i++) {
         if(!SENSOR_ALIVE(i)) continue;
 
         sensor_t sensor_info;
         sensors[i]->getSensor(&sensor_info);
+
         SensorView *sensor_view = new SensorView(*sensors[i]);
         OpenScreenAction *open_sensor_view = new OpenScreenAction(
             std::string(sensor_info.name),

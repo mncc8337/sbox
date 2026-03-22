@@ -15,35 +15,35 @@ static void make_ble_beacon_payload(const sensors_data_t &data, std::vector<uint
         if(!SENSOR_ALIVE(i)) continue;
 
         switch(i) {
-            case SENS_AHTX0_TEMPERATURE: {
-                payload.push_back(SENSOR_TYPE_AMBIENT_TEMPERATURE);
-                int16_t t = (int16_t)(data.temperature * 100 + 0.5f);
-                payload.push_back(t & 0xFF);
-                payload.push_back((t >> 8) & 0xFF);
-                break;
-            }
-            case SENS_AHTX0_HUMIDITY: {
-                payload.push_back(SENSOR_TYPE_RELATIVE_HUMIDITY);
-                uint16_t h = (uint16_t)(data.humidity * 100 + 0.5f);
-                payload.push_back(h & 0xFF);
-                payload.push_back((h >> 8) & 0xFF);
-                break;
-            }
-            case SENS_BMP280_PRESSURE: {
-                payload.push_back(SENSOR_TYPE_PRESSURE);
-                uint16_t p = (uint16_t)(data.pressure * 10 + 0.5f);
-                payload.push_back(p & 0xFF);
-                payload.push_back((p >> 8) & 0xFF);
-                break;
-            }
-            case SENS_BH1750: {
+            case SENS_LIGHT: {
                 payload.push_back(SENSOR_TYPE_LIGHT);
                 uint16_t lux = (uint16_t)(data.light + 0.5f);
                 payload.push_back(lux & 0xFF);
                 payload.push_back((lux >> 8) & 0xFF);
                 break;
             }
-            case SENS_BMI160_ACCELERATION: {
+            case SENS_TEMPERATURE: {
+                payload.push_back(SENSOR_TYPE_AMBIENT_TEMPERATURE);
+                int16_t t = (int16_t)(data.temperature * 100 + 0.5f);
+                payload.push_back(t & 0xFF);
+                payload.push_back((t >> 8) & 0xFF);
+                break;
+            }
+            case SENS_HUMIDITY: {
+                payload.push_back(SENSOR_TYPE_RELATIVE_HUMIDITY);
+                uint16_t h = (uint16_t)(data.humidity * 100 + 0.5f);
+                payload.push_back(h & 0xFF);
+                payload.push_back((h >> 8) & 0xFF);
+                break;
+            }
+            case SENS_PRESSURE: {
+                payload.push_back(SENSOR_TYPE_PRESSURE);
+                uint16_t p = (uint16_t)(data.pressure * 10 + 0.5f);
+                payload.push_back(p & 0xFF);
+                payload.push_back((p >> 8) & 0xFF);
+                break;
+            }
+            case SENS_ACCELERATION: {
                 payload.push_back(SENSOR_TYPE_ACCELEROMETER);
                 for(int k = 0; k < 3; k++) {
                     int16_t a = (int16_t)(data.accel[k] * 100);
@@ -52,7 +52,7 @@ static void make_ble_beacon_payload(const sensors_data_t &data, std::vector<uint
                 }
                 break;
             }
-            case SENS_BMI160_GYROSCOPE: {
+            case SENS_GYROSCOPE: {
                 payload.push_back(SENSOR_TYPE_GYROSCOPE);
                 for(int k = 0; k < 3; k++) {
                     int16_t a = (int16_t)(data.gyro[k] * 100);
@@ -101,7 +101,7 @@ void ble_beacon_set_data(const sensors_data_t &data) {
     advertising->setAdvertisementData(advertisement_data);
 
     if(payload.size() > 20) {
-    NimBLEAdvertisementData scan_response_data = NimBLEAdvertisementData();
+        NimBLEAdvertisementData scan_response_data = NimBLEAdvertisementData();
         size_t remaining_size = payload.size() - 20;
         scan_response_data.setManufacturerData(&payload[20], remaining_size);
         advertising->setScanResponseData(scan_response_data);

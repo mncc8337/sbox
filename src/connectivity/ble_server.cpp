@@ -46,7 +46,6 @@ void ble_server_start() {
     bat_characteristic = battery_service->createCharacteristic(
         "2A19", NIMBLE_PROPERTY::READ | NIMBLE_PROPERTY::NOTIFY
     );
-    battery_service->start();
 
     NimBLEService* env_service = ble_server->createService("181A");
     temp_characteristic = env_service->createCharacteristic(
@@ -61,7 +60,6 @@ void ble_server_start() {
     light_characteristic = env_service->createCharacteristic(
         "2AFB", NIMBLE_PROPERTY::READ | NIMBLE_PROPERTY::NOTIFY
     );
-    env_service->start();
 
     NimBLEService* measurement_service = ble_server->createService("185A");
     accel_characteristic = measurement_service->createCharacteristic(
@@ -70,7 +68,6 @@ void ble_server_start() {
     gyro_characteristic = measurement_service->createCharacteristic(
         "2C09", NIMBLE_PROPERTY::READ | NIMBLE_PROPERTY::NOTIFY
     );
-    measurement_service->start();
 
     NimBLEAdvertising* advertising = NimBLEDevice::getAdvertising();
     advertising->reset();
@@ -95,33 +92,33 @@ void ble_server_update(const sensors_data_t &data, const uint8_t bat_level) {
         data_to_send.clear();
 
         switch(i) {
-            case SENS_AHTX0_TEMPERATURE: {
+            case SENS_TEMPERATURE: {
                 int16_t t = (int16_t)(data.temperature * 100 + 0.5f);
                 data_to_send.assign((uint8_t*)&t, (uint8_t*)&t + 2);
                 break;
             }
-            case SENS_AHTX0_HUMIDITY: {
+            case SENS_HUMIDITY: {
                 uint16_t h = (uint16_t)(data.humidity * 100 + 0.5f);
                 data_to_send.assign((uint8_t*)&h, (uint8_t*)&h + 2);
                 break;
             }
-            case SENS_BMP280_PRESSURE: {
+            case SENS_PRESSURE: {
                 uint32_t p = (uint32_t)(data.pressure * 1000 + 0.5f);
                 data_to_send.assign((uint8_t*)&p, (uint8_t*)&p + 4);
                 break;
             }
-            case SENS_BH1750: {
+            case SENS_LIGHT: {
                 uint32_t lux_val = (uint32_t)(data.light * 100.0f + 0.5f);
                 data_to_send.assign((uint8_t*)&lux_val, (uint8_t*)&lux_val + 3);
                 break;
             }
-            case SENS_BMI160_ACCELERATION: {
+            case SENS_ACCELERATION: {
                 int16_t accel_data[3];
                 for(int k=0; k<3; k++) accel_data[k] = (int16_t)(data.accel[k] * 100);
                 data_to_send.assign((uint8_t*)accel_data, (uint8_t*)accel_data + 6);
                 break;
             }
-            case SENS_BMI160_GYROSCOPE: {
+            case SENS_GYROSCOPE: {
                 int16_t gyro_data[3];
                 for(int k=0; k<3; k++) gyro_data[k] = (int16_t)(data.gyro[k] * 100);
                 data_to_send.assign((uint8_t*)gyro_data, (uint8_t*)gyro_data + 6);
