@@ -20,6 +20,7 @@ public:
         bool button_up_clicked,
         bool button_down_clicked
     ) = 0;
+    virtual void setup();
     virtual void draw(U8G2 &u8g2) = 0;
     virtual bool is_overlay();
     virtual bool prevent_sleep();
@@ -90,7 +91,7 @@ protected:
     int item_sel_next = 1;
 
 public:
-    Menu(std::vector<Action*> &items, unsigned default_select);
+    Menu(std::vector<Action*> &items);
     void process_navigation(
         unsigned long button_select_press_duration,
         bool button_up_clicked,
@@ -104,19 +105,21 @@ private:
     int radio_state = 0;
     int &bound_target;
     std::vector<int> &value_map;
+    void (*callback)(int new_val);
 
 public:
     RadioMenu(
         std::vector<DummyAction*> &items,
         int &bound_target,
         std::vector<int> &value_map,
-        unsigned default_state
+        void (*callback)(int new_val)
     );
     void process_navigation(
         unsigned long button_select_press_duration,
         bool button_up_clicked,
         bool button_down_clicked
     ) override;
+    void setup() override;
     void draw(U8G2 &u8g2) override;
 };
 

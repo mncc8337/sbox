@@ -1,5 +1,5 @@
-#include "esp_system.h"
 #include <ui_layout.h>
+#include <Preferences.h>
 #include <U8g2lib.h>
 #include <screen.h>
 #include <action.h>
@@ -9,8 +9,9 @@
 
 extern bool broadcasting;
 extern U8G2 u8g2;
+extern Preferences preferences;
 
-// connectivity menu
+extern BroadcastType new_broadcast_type;
 DummyAction ble_server_option("BLE Server");
 DummyAction ble_beacon_option("BLE Beacon");
 DummyAction wifi_option("WiFi");
@@ -24,12 +25,15 @@ std::vector<int> connectivity_menu_item_map = {
     BLE_BEACON,
     WIFI,
 };
-extern BroadcastType new_broadcast_type;
+void connectivity_callback(int nval) {
+    preferences.putUChar("broadcast-type", nval);
+    printf("set bt %d\n", nval);
+}
 RadioMenu connectivity_menu(
     connectivity_menu_items,
     (int&)new_broadcast_type,
     connectivity_menu_item_map,
-    0
+    connectivity_callback
 );
 OpenScreenAction open_connectivity_menu("Connectivity", &connectivity_menu);
 
@@ -84,26 +88,27 @@ FunctionAction broadcast("Broadcast", broadcast_func);
 DummyAction open_sensors_menu("Sensors");
 
 extern unsigned long screen_brightness;
-DummyAction screen_brightness_menu_item_1("1");
 DummyAction screen_brightness_menu_item_10("10");
 DummyAction screen_brightness_menu_item_25("25");
 DummyAction screen_brightness_menu_item_50("50");
 DummyAction screen_brightness_menu_item_75("75");
 DummyAction screen_brightness_menu_item_100("100");
 std::vector<DummyAction*> screen_brightness_menu_items = {
-    &screen_brightness_menu_item_1,
     &screen_brightness_menu_item_10,
     &screen_brightness_menu_item_25,
     &screen_brightness_menu_item_50,
     &screen_brightness_menu_item_75,
     &screen_brightness_menu_item_100,
 };
-std::vector<int> screen_brightness_menu_item_map = {1, 8, 26, 64, 128, 255};
+std::vector<int> screen_brightness_menu_item_map = {8, 26, 64, 128, 255};
+void brightness_callback(int nval) {
+    preferences.putUChar("scrn-bright", nval);
+}
 RadioMenu screen_brightness_menu(
     screen_brightness_menu_items,
     (int&)screen_brightness,
     screen_brightness_menu_item_map,
-    4
+    brightness_callback
 );
 OpenScreenAction open_screen_brightness_menu("Brightness", &screen_brightness_menu);
 
@@ -124,11 +129,14 @@ std::vector<int> screen_timeout_menu_item_map = {
     5 * 60000,
     10 * 60000,
 };
+void screen_timeout_callback(int nval) {
+    preferences.putULong("scrn-timeout", nval);
+}
 RadioMenu screen_timeout_menu(
     screen_timeout_menu_items,
     (int&)screen_timeout,
     screen_timeout_menu_item_map,
-    1
+    screen_timeout_callback
 );
 OpenScreenAction open_screen_timeout_menu("Screen Timeout", &screen_timeout_menu);
 
@@ -148,8 +156,27 @@ std::vector<Action*> screen_menu_items = {
     &open_screen_timeout_menu,
     &screen_invert,
 };
-Menu screen_menu(screen_menu_items, 0);
+Menu screen_menu(screen_menu_items);
 OpenScreenAction open_screen_menu("Screen", &screen_menu);
+
+extern bool is_datalogger_enabled;
+DummyAction datalogger_menu_item_disable("Disable");
+DummyAction datalogger_menu_item_enable("Enable");
+std::vector<DummyAction*> datalogger_menu_items = {
+    &datalogger_menu_item_disable,
+    &datalogger_menu_item_enable,
+};
+std::vector<int> datalogger_menu_item_map = {0, 1};
+void datalogger_callback(int nval) {
+    preferences.getBool("datalogger-en", nval);
+}
+RadioMenu datalogger_menu(
+    datalogger_menu_items,
+    (int&)is_datalogger_enabled,
+    datalogger_menu_item_map,
+    datalogger_callback
+);
+OpenScreenAction open_datalogger_menu("Datalogger", &datalogger_menu);
 
 InfoScreen info_screen_instance;
 OpenScreenAction open_info_menu("Info", &info_screen_instance);
@@ -160,14 +187,15 @@ std::vector<Action*> settings_menu_items = {
     &open_connectivity_menu,
     &open_sensors_menu,
     &open_screen_menu,
+    &open_datalogger_menu,
     &open_info_menu,
     &reboot,
 };
-Menu settings_menu(settings_menu_items, 0);
+Menu settings_menu(settings_menu_items);
 OpenScreenAction open_settings_menu("Settings", &settings_menu);
 
 std::vector<Action*> sensor_data_menu_items;
-Menu sensor_data_menu(sensor_data_menu_items, 0);
+Menu sensor_data_menu(sensor_data_menu_items);
 OpenScreenAction open_sensor_data_menu("Sensor Data", &sensor_data_menu);
 
 SplashScreen splash_screen;
@@ -179,7 +207,7 @@ std::vector<Action*> main_menu_items = {
     &broadcast,
     &open_splash_screen
 };
-Menu main_menu(main_menu_items, 0);
+Menu main_menu(main_menu_items);
 
 void ui_init() {
     sensor_data_menu_items.reserve(SENS_COUNT);

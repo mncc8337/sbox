@@ -1,5 +1,8 @@
 #include <Arduino.h>
 #include <Wire.h>
+#include <LittleFS.h>
+#include <Preferences.h>
+
 #include <esp_sleep.h>
 
 #include <bitmap.h>
@@ -7,8 +10,16 @@
 #include <ui_layout.h>
 #include <connectivity.h>
 
+// littlefs format
+#define FORMAT_IF_FAILED true
+
 #define SDA_PIN 8
 #define SCL_PIN 9
+
+// #define SCK_PIN 6
+// #define MISO_PIN 2
+// #define MOSI_PIN 7
+// #define CS_PIN 10
 
 #define BUTTON_UP_PIN 3
 #define BUTTON_DOWN_PIN 1
@@ -16,14 +27,26 @@
 
 #define BATTERY_PIN 0
 
+enum Feature {
+    FEAT_BLE = 0b1,
+    FEAT_LITTLEFS = 0b01,
+};
+
+Preferences preferences;
+
+uint16_t feature_mask = 0;
+
 bool broadcasting = false;
-BroadcastType broadcast_type = BLE_SERVER;
-BroadcastType new_broadcast_type = BLE_SERVER;
+
+BroadcastType broadcast_type;
+BroadcastType new_broadcast_type;
 
 bool sleep_lock = false;
 bool screen_off = false;
-unsigned long screen_timeout = 3 * 60000;
-uint8_t screen_brightness = 128;
+unsigned long screen_timeout;
+
+uint8_t screen_brightness;
+bool is_datalogger_enabled;
 
 U8G2_SSD1306_128X64_NONAME_F_HW_I2C u8g2(U8G2_R0);
 
@@ -35,6 +58,7 @@ void open_screen(Screen *screen) {
         return;
     screen_stack[screen_stack_ptr++] = current_screen;
     current_screen = screen;
+    current_screen->setup();
     current_screen->request_redraw();
 
     sleep_lock = current_screen->prevent_sleep();
@@ -135,7 +159,7 @@ void update_battery_readings() {
 
 void setup() {
     // wait for usb cdc to connect
-    delay(1000);
+    delay(500);
     puts("hello from esp32c3");
 
     pinMode(BUTTON_UP_PIN, INPUT);
@@ -155,6 +179,7 @@ void setup() {
     }
 
     if(init_sensors() != (1 << SENS_COUNT) - 1) {
+        u8g2.clearBuffer();
         u8g2.setFont(u8g2_font_4x6_tf);
         u8g2.setCursor(0, 5); u8g2.printf("failed to init some sensors");
         u8g2.setCursor(0, 5 * 2 + 2 * 1); u8g2.printf("sensor mask: 0x%X", sensor_mask);
@@ -165,13 +190,46 @@ void setup() {
             delay(10);
     }
 
-    while(digitalRead(BUTTON_SELECT_PIN) == HIGH)
-        delay(10);
+    if(!LittleFS.begin(FORMAT_IF_FAILED)) {
+        u8g2.clearBuffer();
+        u8g2.setFont(u8g2_font_4x6_tf);
+        u8g2.setCursor(0, 5); u8g2.printf("failed to mount LittleFS");
+        u8g2.setCursor(0, 5 * 2 + 2 * 1); u8g2.printf("press SELECT to continue");
+        u8g2.sendBuffer();
 
-    ble_init();
+        while(digitalRead(BUTTON_SELECT_PIN) == LOW)
+            delay(10);
+    } else {
+        feature_mask |= FEAT_LITTLEFS;
+    }
+
+    if(!ble_init()) {
+        u8g2.clearBuffer();
+        u8g2.setFont(u8g2_font_4x6_tf);
+        u8g2.setCursor(0, 5); u8g2.printf("failed to init BLE");
+        u8g2.setCursor(0, 5 * 2 + 2 * 1); u8g2.printf("BLE features may not be usable");
+        u8g2.setCursor(0, 5 * 3 + 2 * 2); u8g2.printf("press SELECT to continue");
+        u8g2.sendBuffer();
+
+        while(digitalRead(BUTTON_SELECT_PIN) == LOW)
+            delay(10);
+    } else {
+        feature_mask |= FEAT_BLE;
+    }
+
+    // load saved settings
+    preferences.begin("settings", false);
+    screen_timeout = preferences.getULong("scrn-timeout", 3 * 60000);
+    screen_brightness = preferences.getUChar("scrn-bright", 128);
+    is_datalogger_enabled = preferences.getBool("datalogger-en", false);
+    broadcast_type = (BroadcastType)preferences.getUChar("broadcast-type", BLE_SERVER);
+    new_broadcast_type = broadcast_type;
+
+    printf("%d\n", screen_brightness);
+
     ui_init();
 
-    // splash images
+    // load splash gif for fun
     u8g2.setBitmapMode(0);
     for(unsigned i = 0; i < BITMAP_SPLASH_LEN * 3; i++) {
         u8g2.drawXBMP(0, 0, 128, 64, BITMAP_SPLASH[i % BITMAP_SPLASH_LEN]);
@@ -180,7 +238,7 @@ void setup() {
     }
     u8g2.setBitmapMode(1);
 
-    current_screen = &main_menu;
+    current_screen = (Screen*)&main_menu;
     current_screen->request_redraw();
 }
 

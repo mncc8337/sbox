@@ -10,7 +10,7 @@ enum BroadcastType {
     WIFI,
 };
 
-extern void ble_init();
+extern bool ble_init();
 
 extern void ble_beacon_start();
 extern void ble_beacon_set_data(const sensors_data_t &data);

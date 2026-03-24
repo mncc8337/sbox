@@ -6,12 +6,14 @@ RadioMenu::RadioMenu(
     std::vector<DummyAction*> &items,
     int &bound_target,
     std::vector<int> &value_map,
-    unsigned default_state
+    void (*callback)(int new_value)
 )
-    : Menu((std::vector<Action*> &)items, default_state),
+    : Menu((std::vector<Action*> &)items),
       bound_target(bound_target),
       value_map(value_map),
-      radio_state(default_state) {}
+      callback(callback) {
+    item_selected = -1;
+}
 
 void RadioMenu::process_navigation(
     unsigned long button_select_press_duration,
@@ -24,7 +26,25 @@ void RadioMenu::process_navigation(
         radio_state = item_selected;
         bound_target = value_map[radio_state];
         redraw_request = true;
+
+        if(callback) callback(value_map[radio_state]);
     }
+}
+
+void RadioMenu::setup() {
+    if(item_selected >= 0) return;
+
+    for(radio_state = 0; radio_state < items.size(); radio_state++) {
+        if(value_map[radio_state] == bound_target) break;
+    }
+
+    if(radio_state == items.size()) {
+        radio_state = 0;
+    }
+
+    item_selected = radio_state;
+    item_sel_previous = item_selected - 1;
+    item_sel_next = item_selected + 1;
 }
 
 void RadioMenu::draw(U8G2 &u8g2) {

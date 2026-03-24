@@ -1,6 +1,8 @@
 #include <screen.h>
 #include <bitmap.h>
 
+void Screen::setup() {}
+
 bool Screen::is_overlay() {
     return false;
 }

@@ -2,11 +2,8 @@
 #include <action.h>
 #include <bitmap.h>
 
-Menu::Menu(std::vector<Action*> &items, unsigned default_select)
-    : items((std::vector<Action*>&)items),
-      item_selected(default_select),
-      item_sel_next(default_select + 1),
-      item_sel_previous(default_select - 1) {}
+Menu::Menu(std::vector<Action*> &items)
+    : items((std::vector<Action*>&)items) {}
 
 void Menu::process_navigation(
     unsigned long button_select_press_duration,

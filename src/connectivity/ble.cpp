@@ -2,6 +2,6 @@
 #include <NimBLEDevice.h>
 #include <NimBLEUtils.h>
 
-void ble_init() {
-    NimBLEDevice::init("SBOX");
+bool ble_init() {
+    return NimBLEDevice::init("SBOX");
 }
