@@ -25,6 +25,23 @@ bool BMI160GenClass::begin(Mode mode, const int arg1, const int arg2)
         return false;
     }
 
+    // the original library does not check wether the
+    // sensor is connected or not
+    // if you run BMI160GenClass::begin() without connecting the sensor
+    // it then calls
+    // CurieIMUClass::begin() -> BMI160Class::initialize()
+    // inside BMI160Class::initialize(), you can see that there is a while loop
+    // waiting for data. this will spam the serial with this
+    // [timestamp][Wire.cpp:513] requestFrom(): i2cRead returned Error -1
+    // and trap the code there
+    // so make sure the sensor exists before continuing
+    if(mode == I2C_MODE) {
+        Wire.beginTransmission(i2c_addr);
+        if(Wire.endTransmission() != 0)
+            return false;
+    }
+    // i currently only need i2c mode for now
+
     if (0 <= arg2) {
         interrupt_pin = digitalPinToInterrupt(arg2);
 #ifdef DEBUG
