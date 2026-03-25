@@ -1,0 +1,12 @@
+#!/bin/sh
+
+source ./.env
+
+export PLATFORMIO_BUILD_FLAGS="\
+    -D WIFI_SSID=\\\"$WIFI_SSID\\\" \
+    -D WIFI_PASSWORD=\\\"$WIFI_PASSWORD\\\" \
+    -D NTP_SERVER=\\\"$NTP_SERVER\\\" \
+    -D TZ_INFO=\\\"$TZ_INFO\\\" \
+"
+
+pio run $@

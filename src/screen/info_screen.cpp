@@ -1,4 +1,5 @@
 #include <screen.h>
+#include <time.h>
 #include <sensors.h>
 #include <esp_mac.h>
 #include <esp_system.h>
@@ -50,14 +51,29 @@ void InfoScreen::draw(U8G2 &u8g2) {
     u8g2.setCursor(0, y); u8g2.printf("Free mem: %luKiB", free_heap);
     y += 8;
 
+    struct tm timeinfo;
+    getLocalTime(&timeinfo);
+    char buff[32];
+    strftime(buff, 32, "%a %F %T", &timeinfo);
+    u8g2.setCursor(0, y); u8g2.printf("Current time:");
+    y += 8;
+    u8g2.setCursor(5, y); u8g2.printf(buff);
+    y += 8;
+
     uint64_t uptime_sec = esp_timer_get_time() / 1000000;
     u8g2.setCursor(0, y); u8g2.printf("Uptime: %llus", uptime_sec);
     y += 8;
 
     uint8_t mac[6];
+
     esp_read_mac(mac, ESP_MAC_WIFI_STA); 
     u8g2.setCursor(0, y); 
-    u8g2.printf("MAC: %02X:%02X:%02X:%02X:%02X:%02X", mac[0], mac[1], mac[2], mac[3], mac[4], mac[5]);
+    u8g2.printf("WiFiMAC %02X:%02X:%02X:%02X:%02X:%02X", mac[0], mac[1], mac[2], mac[3], mac[4], mac[5]);
+    y += 8;
+
+    esp_read_mac(mac, ESP_MAC_BT); 
+    u8g2.setCursor(0, y); 
+    u8g2.printf("BTMAC %02X:%02X:%02X:%02X:%02X:%02X", mac[0], mac[1], mac[2], mac[3], mac[4], mac[5]);
     y += 8;
 
     int alive_count = 0;

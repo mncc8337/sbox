@@ -1,7 +1,7 @@
 #include <action.h>
 #include <screen.h>
 
-extern void open_screen(Screen*);
+extern void open_screen(Screen*, bool forced=false);
 
 Action::Action(std::string name) : name(name) {};
 

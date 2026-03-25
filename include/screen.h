@@ -93,7 +93,7 @@ protected:
     bool *block_flag;
 
 public:
-    Menu(std::vector<Action*> &items, bool *block_flag);
+    Menu(std::vector<Action*> &items, bool *block_flag=nullptr);
     void process_navigation(
         unsigned long button_select_press_duration,
         bool button_up_clicked,
@@ -116,7 +116,7 @@ public:
         int &bound_target,
         std::vector<int> &value_map,
         void (*callback)(int new_val),
-        bool *block_flag
+        bool *block_flag=nullptr
     );
     void process_navigation(
         unsigned long button_select_press_duration,

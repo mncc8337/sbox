@@ -54,7 +54,16 @@ U8G2_SSD1306_128X64_NONAME_F_HW_I2C u8g2(U8G2_R0);
 Screen *current_screen;
 Screen *screen_stack[8];
 unsigned screen_stack_ptr = 0;
-void open_screen(Screen *screen) {
+
+void draw_frame() {
+    if(!current_screen->is_overlay())
+        u8g2.clearBuffer();
+    current_screen->draw(u8g2);
+    u8g2.setContrast(screen_brightness);
+    u8g2.sendBuffer();
+}
+
+void open_screen(Screen *screen, bool forced=false) {
     if(screen_stack_ptr >= 8 || screen_stack[screen_stack_ptr - 1] == current_screen)
         return;
     if(screen->is_blocked()) {
@@ -67,6 +76,10 @@ void open_screen(Screen *screen) {
     current_screen->request_redraw();
 
     sleep_lock = current_screen->prevent_sleep();
+
+    if(forced) {
+        draw_frame();
+    }
 }
 void open_prev_screen() {
     if(!screen_stack_ptr) return;
@@ -123,11 +136,19 @@ void turn_on_screen() {
     screen_off = false;
 }
 
-void emergency_shutdown() {
+void shutdown() {
+    sleep_sensors();
     u8g2.setPowerSave(1);
     Wire.end();
     pinMode(SDA_PIN, INPUT);
     pinMode(SCL_PIN, INPUT);
+
+    // TODO:
+    // do some hardware tricks to actually cut the power off all peripherals
+
+    // config deep sleep wake pin
+    pinMode(BUTTON_SELECT_PIN, INPUT_PULLUP);
+    esp_deep_sleep_enable_gpio_wakeup(1ULL << BUTTON_SELECT_PIN, ESP_GPIO_WAKEUP_GPIO_HIGH);
     esp_deep_sleep_start();
 }
 
@@ -163,13 +184,12 @@ void update_battery_readings() {
 }
 
 void setup() {
-    // wait for usb cdc to connect
-    delay(500);
-    puts("hello from esp32c3");
-
     pinMode(BUTTON_UP_PIN, INPUT);
     pinMode(BUTTON_DOWN_PIN, INPUT);
     pinMode(BUTTON_SELECT_PIN, INPUT);
+
+    setenv("TZ", TZ_INFO, 1);
+    tzset();
 
     pinMode(BATTERY_PIN, INPUT);
 
@@ -178,10 +198,17 @@ void setup() {
 
     Wire.begin(SDA_PIN, SCL_PIN);
 
-    if(!u8g2.begin()) {
+    // check if the screen exists or not
+    // because no matter how the screen is
+    // u8g2.begin() always return true
+    Wire.beginTransmission(0x3c);
+    if(Wire.endTransmission() != 0) {
+        delay(1000);
         puts("screen is failing, please check connection");
-        while(1);
+        while(1) delay(1);
     }
+
+    u8g2.begin();
 
     if(init_sensors() != (1 << SENS_COUNT) - 1) {
         u8g2.clearBuffer();
@@ -230,13 +257,12 @@ void setup() {
     is_telemetry_enabled = preferences.getBool(KEY_BROADCAST_ENABLE, false);
     telemetry_type = (TelemetryType)preferences.getUChar(KEY_TELEMETRY_TYPE, BLE_SERVER);
 
-    printf("%d\n", screen_brightness);
-
     ui_init();
 
     // load splash gif for fun
     u8g2.setBitmapMode(0);
-    for(unsigned i = 0; i < BITMAP_SPLASH_LEN * 3; i++) {
+    for(unsigned i = 0; i < BITMAP_SPLASH_LEN * 5; i++) {
+        if(digitalRead(BUTTON_SELECT_PIN) == HIGH) break;
         u8g2.drawXBMP(0, 0, 128, 64, BITMAP_SPLASH[i % BITMAP_SPLASH_LEN]);
         u8g2.sendBuffer();
         delay(10);
@@ -256,7 +282,7 @@ void loop() {
     if(current_ts - last_battery_update_ts > 3000) {
         update_battery_readings();
         if(psu_voltage_avg < 3400)
-            emergency_shutdown();
+            shutdown();
         last_battery_update_ts = current_ts;
     }
 
@@ -337,11 +363,7 @@ void loop() {
         );
 
         if(current_screen->redraw_request) {
-            if(!current_screen->is_overlay())
-                u8g2.clearBuffer();
-            current_screen->draw(u8g2);
-            u8g2.setContrast(screen_brightness);
-            u8g2.sendBuffer();
+            draw_frame();
         }
     } else {
         if(button_select_press_time > 0) {

@@ -1,3 +1,4 @@
+.env
 .pio
 .cache
 .clangd

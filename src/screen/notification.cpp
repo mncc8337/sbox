@@ -4,7 +4,7 @@
 #include <bitmap.h>
 
 extern void open_prev_screen();
-extern void open_screen(Screen *screen);
+extern void open_screen(Screen *screen, bool forced);
 
 // global notification object
 static Notification notif("12345678901234567890"); // reserve 20 bytes
@@ -59,5 +59,5 @@ bool Notification::is_overlay() {
 
 void open_notification(std::string message) {
     notif.set_message(message);
-    open_screen(&notif);
+    open_screen(&notif, true);
 }

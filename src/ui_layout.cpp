@@ -1,12 +1,21 @@
+#include <ctime>
+#include <string>
 #include <ui_layout.h>
-#include <Preferences.h>
-#include <preference_keys.h>
-#include <U8g2lib.h>
 #include <screen.h>
 #include <action.h>
-#include <connectivity.h>
+
+#include <U8g2lib.h>
+
 #include <sensors.h>
 #include <Adafruit_Sensor.h>
+
+#include <connectivity.h>
+
+#include <Preferences.h>
+#include <preference_keys.h>
+#include <esp_sleep.h>
+
+#include <WiFi.h>
 
 extern bool is_session_running;
 extern U8G2 u8g2;
@@ -33,8 +42,7 @@ RadioMenu connectivity_menu(
     connectivity_menu_items,
     (int&)telemetry_type,
     connectivity_menu_item_map,
-    connectivity_callback,
-    nullptr
+    connectivity_callback
 );
 OpenScreenAction open_connectivity_menu("Connectivity", &connectivity_menu);
 
@@ -170,8 +178,7 @@ RadioMenu screen_brightness_menu(
     screen_brightness_menu_items,
     (int&)screen_brightness,
     screen_brightness_menu_item_map,
-    brightness_callback,
-    nullptr
+    brightness_callback
 );
 OpenScreenAction open_screen_brightness_menu("Brightness", &screen_brightness_menu);
 
@@ -199,8 +206,7 @@ RadioMenu screen_timeout_menu(
     screen_timeout_menu_items,
     (int&)screen_timeout,
     screen_timeout_menu_item_map,
-    screen_timeout_callback,
-    nullptr
+    screen_timeout_callback
 );
 OpenScreenAction open_screen_timeout_menu("Screen Timeout", &screen_timeout_menu);
 
@@ -220,27 +226,66 @@ std::vector<Action*> screen_menu_items = {
     &open_screen_timeout_menu,
     &screen_invert,
 };
-Menu screen_menu(screen_menu_items, nullptr);
+Menu screen_menu(screen_menu_items);
 OpenScreenAction open_screen_menu("Screen", &screen_menu);
+
+void do_sync_time() {
+    if(is_session_running) {
+        open_notification("Please stop\nthe current session\nto sync time");
+        return;
+    }
+
+    open_notification("Trying to connect\nto WiFi\n" WIFI_SSID);
+    WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
+    unsigned tries = 0;
+    while(WiFi.status() != WL_CONNECTED && tries < 10) {
+        delay(500);
+        tries++;
+    }
+    if(WiFi.status() != WL_CONNECTED) {
+        open_notification("Failed to connect to WiFi");
+        WiFi.disconnect(true);
+        WiFi.mode(WIFI_OFF);
+    }
+    open_notification("Connected to WiFi\n\"" WIFI_SSID "\"");
+
+    configTzTime(TZ_INFO, NTP_SERVER);
+
+    struct tm timeinfo;
+    getLocalTime(&timeinfo);
+
+    char buff[32];
+    strftime(buff, 32, "%F\n %T", &timeinfo);
+    open_notification(std::string("Time synced\nCurrent:\n ") + std::string(buff));
+
+    WiFi.disconnect(true);  
+    WiFi.mode(WIFI_OFF);
+}
+FunctionAction sync_time("Sync Time", do_sync_time);
 
 InfoScreen info_screen_instance;
 OpenScreenAction open_info_menu("Info", &info_screen_instance);
 
 FunctionAction reboot("Reboot", esp_restart);
 
+extern void shutdown();
+FunctionAction toggle_deepsleep("Deepsleep", shutdown);
+
 std::vector<Action*> settings_menu_items = {
     &open_telemetry_menu,
     &open_datalogger_menu,
     &open_sensors_menu,
     &open_screen_menu,
+    &sync_time,
     &open_info_menu,
     &reboot,
+    &toggle_deepsleep,
 };
-Menu settings_menu(settings_menu_items, nullptr);
+Menu settings_menu(settings_menu_items);
 OpenScreenAction open_settings_menu("Settings", &settings_menu);
 
 std::vector<Action*> sensor_data_menu_items;
-Menu sensor_data_menu(sensor_data_menu_items, nullptr);
+Menu sensor_data_menu(sensor_data_menu_items);
 OpenScreenAction open_sensor_data_menu("Sensor Data", &sensor_data_menu);
 
 SplashScreen splash_screen;
@@ -252,7 +297,7 @@ std::vector<Action*> main_menu_items = {
     &open_settings_menu,
     &open_splash_screen
 };
-Menu main_menu(main_menu_items, nullptr);
+Menu main_menu(main_menu_items);
 
 void ui_init() {
     sensor_data_menu_items.reserve(SENS_COUNT);
