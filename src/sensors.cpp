@@ -1,10 +1,18 @@
+#include "Arduino.h"
+#include "freertos/projdefs.h"
 #include <sensors.h>
 #include <Adafruit_BMP280.h>
 #include <Adafruit_AHTX0.h>
 #include <hp_BH1750.h>
 #include <BH1750_US.h>
 #include <BMI160_US.h>
+
+#include <freertos/FreeRTOS.h>
+#include <freertos/queue.h>
+#include <mutexes.h>
+
 #include <esp_log.h>
+#include <sys/unistd.h>
 
 Adafruit_BMP280 bmp280;
 Adafruit_AHTX0 ahtx0;
@@ -15,7 +23,7 @@ BMI160_US_Gyroscope bmi160_gyro(160);
 
 Adafruit_Sensor *sensors[SENS_COUNT];
 uint16_t sensor_mask;
-uint16_t log_n_send_mask = 0xffff;
+uint16_t lognsend_mask = 0xffff;
 
 Adafruit_BMP280::sensor_sampling bmp280_sampling = Adafruit_BMP280::SAMPLING_X16;
 Adafruit_BMP280::sensor_filter bmp280_filter = Adafruit_BMP280::FILTER_X4;
@@ -26,6 +34,11 @@ int bmi160_accel_odr = BMI160_ACCEL_RATE_100HZ;
 
 int bmi160_gyro_range = BMI160_GYRO_RANGE_2000;
 int bmi160_gyro_odr = BMI160_GYRO_RATE_50HZ;
+
+QueueHandle_t live_data_sensor_event_queue;
+volatile int live_data_sensor_id = -1;
+
+QueueHandle_t all_lognsend_sensor_data_queue;
 
 const char* get_sensor_type_string(const int &type) {
     switch(type) {
@@ -121,10 +134,20 @@ static void bmi160_off() {
     BMI160.setRegister(0x7E, 0x14); delay(50);
 }
 
-uint16_t init_sensors() {
+uint16_t sensors_init() {
     sensor_mask = 0;
     for(int i = 0; i < SENS_COUNT; i++) {
         sensors[i] = nullptr;
+    }
+
+    if(bh1750_hw.begin(0x23)) {
+        sensor_mask |= 1 << SENS_LIGHT;
+        sensors[SENS_LIGHT] = &bh1750;
+        bh1750_hw.calibrateTiming();
+        bh1750_hw.start(BH1750_QUALITY_HIGH2, 69);
+        ESP_LOGI("SENSORS", "BH1750 initialized");
+    } else {
+        ESP_LOGE("SENSORS", "BH1750 failed to initialize");
     }
 
     if(ahtx0.begin()) {
@@ -153,16 +176,6 @@ uint16_t init_sensors() {
         ESP_LOGE("SENSORS", "BMP280 failed to initialize");
     }
 
-    if(bh1750_hw.begin(0x23)) {
-        sensor_mask |= 1 << SENS_LIGHT;
-        sensors[SENS_LIGHT] = &bh1750;
-        bh1750_hw.calibrateTiming();
-        bh1750_hw.start(BH1750_QUALITY_HIGH2, 69);
-        ESP_LOGI("SENSORS", "BH1750 initialized");
-    } else {
-        ESP_LOGE("SENSORS", "BH1750 failed to initialize");
-    }
-
     if(BMI160.begin(BMI160GenClass::I2C_MODE, 0x69)) {
         sensor_mask |= 1 << SENS_ACCELERATION;
         sensor_mask |= 1 << SENS_GYROSCOPE;
@@ -179,6 +192,10 @@ uint16_t init_sensors() {
         ESP_LOGE("SENSORS", "BMI160 failed to initialize");
     }
 
+    // setup rtos task stuff
+    live_data_sensor_event_queue = xQueueCreate(1, sizeof(sensors_event_t));
+    all_lognsend_sensor_data_queue =  xQueueCreate(1, sizeof(sensors_data_t));
+
     return sensor_mask;
 }
 
@@ -187,7 +204,7 @@ void sleep_sensors() {
         bmp280.setSampling(Adafruit_BMP280::MODE_SLEEP);
 
     // ahtx0 and bh1750 dont need to sleep
-    
+
     if(SENSOR_ALIVE(SENS_ACCELERATION))
         bmi160_off();
 
@@ -218,39 +235,106 @@ void unset_low_power_sensor_mode() {
     ESP_LOGI("SENSORS", "Unset all sensors to low power mode");
 }
 
-void get_sensors_data(sensors_data_t &data) {
-    sensors_event_t event;
+void request_live_data_sensor_poll(int target_sensor) {
+    live_data_sensor_id = target_sensor;
+    xQueueReset(live_data_sensor_event_queue);
+}
 
-    for(unsigned i = 0; i < SENS_COUNT; i++) {
-        if(!SENSOR_ALIVE(i) || !SENSOR_ACTIVE(i)) continue;
+bool requested_live_data_poll_ready(sensors_event_t &out_event) {
+    if(xQueueReceive(live_data_sensor_event_queue, &out_event, 0) == pdPASS) {
+        live_data_sensor_id = -1;
+        return true;
+    }
+    return false;
+}
 
-        sensors[i]->getEvent(&event);
+bool all_data_poll_ready(sensors_data_t &out_data) {
+    if(xQueueReceive(all_lognsend_sensor_data_queue, &out_data, 0) == pdPASS) {
+        return true;
+    }
+    return false;
+}
 
-        switch(i) {
-            case SENS_TEMPERATURE:
-                data.temperature = event.temperature;
-                break;
-            case SENS_HUMIDITY:
-                data.humidity = event.relative_humidity;
-                break;
-            case SENS_PRESSURE:
-                data.pressure = event.pressure;
-                break;
-            case SENS_LIGHT:
-                data.light = event.light;
-                break;
-            case SENS_ACCELERATION: 
-                data.accel[0] = event.acceleration.x;
-                data.accel[1] = event.acceleration.y;
-                data.accel[2] = event.acceleration.z;
-                break;
-            case SENS_GYROSCOPE:
-                data.gyro[0] = event.gyro.x;
-                data.gyro[1] = event.gyro.y;
-                data.gyro[2] = event.gyro.z;
-                break;
+extern bool is_session_running;
+void sensors_task(void *parameters) {
+    uint16_t ready_mask = 0;
+    sensors_data_t all_data = {0};
+
+    while(true) {
+        int live_data_local_id = live_data_sensor_id;
+
+        // poll all enabled sensors
+        if(is_session_running) {
+            sensors_event_t t_event;
+
+            for(unsigned i = 0; i < SENS_COUNT; i++) {
+                if(!SENSOR_ALIVE(i) || !SENSOR_ACTIVE(i) || ((ready_mask >> i) & 1)) continue;
+
+                bool ready = sensors[i]->getEvent(&t_event);
+                if(!ready) continue;
+
+                t_event.sensor_id = i;
+                ready_mask |= 1 << i;
+
+                // poll live data sensor
+                if(i == live_data_local_id)
+                    xQueueOverwrite(live_data_sensor_event_queue, &t_event);
+
+                switch(i) {
+                    case SENS_TEMPERATURE:
+                        all_data.temperature = t_event.temperature;
+                        break;
+                    case SENS_HUMIDITY:
+                        all_data.humidity = t_event.relative_humidity;
+                        break;
+                    case SENS_PRESSURE:
+                        all_data.pressure = t_event.pressure;
+                        break;
+                    case SENS_LIGHT:
+                        all_data.light = t_event.light;
+                        break;
+                    case SENS_ACCELERATION: 
+                        all_data.accel[0] = t_event.acceleration.x;
+                        all_data.accel[1] = t_event.acceleration.y;
+                        all_data.accel[2] = t_event.acceleration.z;
+                        break;
+                    case SENS_GYROSCOPE:
+                        all_data.gyro[0] = t_event.gyro.x;
+                        all_data.gyro[1] = t_event.gyro.y;
+                        all_data.gyro[2] = t_event.gyro.z;
+                        break;
+                }
+            }
+
+            if(ready_mask == lognsend_mask) {
+                xQueueOverwrite(all_lognsend_sensor_data_queue, &all_data);
+                ready_mask = 0;
+                all_data = {0};
+                // data packet isnt sent that regularly
+                vTaskDelay(pdMS_TO_TICKS(100));
+                continue;
+            }
+            // repoll, some sensors aint ready
+        } else {
+            // poll live data sensor
+            if(live_data_local_id >= 0 && SENSOR_ALIVE(live_data_local_id)) {
+                sensors_event_t t_event;
+                bool ready = sensors[live_data_local_id]->getEvent(&t_event);
+                t_event.sensor_id = live_data_local_id;
+
+                if(ready) {
+                    xQueueOverwrite(live_data_sensor_event_queue, &t_event);
+
+                    // it is guarantee that no sensorview screen has sample interval
+                    // smaller than 40ms
+                    vTaskDelay(pdMS_TO_TICKS(40));
+                    continue;
+                }
+            }
         }
+
+        vTaskDelay(pdMS_TO_TICKS(10));
     }
 
-    ESP_LOGD("SENSORS", "All active sensors read");
+    vTaskDelete(NULL);
 }

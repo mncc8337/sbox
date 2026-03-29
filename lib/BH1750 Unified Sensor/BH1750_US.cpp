@@ -5,16 +5,12 @@ BH1750_US::BH1750_US(hp_BH1750 &hw, int32_t id)
     : sensor_hw(hw), sensor_id(id) {}
 
 bool BH1750_US::getEvent(sensors_event_t* event) {
-    int raw = last_raw;
+    if(!sensor_hw.hasValue())
+        return false;
 
-    if(sensor_hw.hasValue()) {
-        raw = sensor_hw.getRaw();
-        last_raw = raw;
+    int raw = sensor_hw.getRaw();
 
-        sensor_hw.adjustSettings(50);
-
-        sensor_hw.start();
-    }
+    // sensor_hw.adjustSettings(50);
 
     memset(event, 0, sizeof(sensors_event_t));
     event->version = 1;
@@ -22,6 +18,8 @@ bool BH1750_US::getEvent(sensors_event_t* event) {
     event->type = SENSOR_TYPE_LIGHT;
     event->timestamp = millis();
     event->light = sensor_hw.calcLux(raw);
+
+    sensor_hw.start();
     
     return true; 
 }

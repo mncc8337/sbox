@@ -9,14 +9,14 @@ static float mapf(float x, float in_min, float in_max, float out_min, float out_
     return (x - in_min) * (out_max - out_min) / (in_max - in_min) + out_min;
 }
 
-SensorView::SensorView(Adafruit_Sensor &sensor) : sensor(sensor) {
-    sensor_t sensor_info;
-    sensor.getSensor(&sensor_info);
-    strncpy(sensor_name, sensor_info.name, sizeof(sensor_name));
-    sensor_type = sensor_info.type;
+extern
 
-    max_sensor_value = sensor_info.max_value;
-    min_sensor_value = sensor_info.min_value;
+SensorView::SensorView(int sensor_id, sensor_t &sensor_info)
+    :   sensor_id(sensor_id),
+        sensor_type(sensor_info.type),
+        max_sensor_value(sensor_info.max_value),
+        min_sensor_value(sensor_info.min_value) {
+    strncpy(sensor_name, sensor_info.name, sizeof(sensor_name));
 
     multi_axis = (
         sensor_type == SENSOR_TYPE_ACCELEROMETER
@@ -60,12 +60,20 @@ void SensorView::process_navigation(
         request_redraw();
     }
 
-    if(millis() - last_sampling_ts >= sample_interval_ms) {
-        sensor.getEvent(&sensor_event);
+    unsigned long sampling_delay = millis() - last_sampling_ts;
+    if(sampling_delay >= sample_interval_ms) {
+        request_live_data_sensor_poll(sensor_id);
+
+        if(sampling_delay > sample_interval_ms * 2) {
+            last_sampling_ts += sampling_delay;
+        } else {
+            last_sampling_ts += sample_interval_ms;
+        }
+    }
+
+    if(requested_live_data_poll_ready(sensor_event)) {
         graph_data[graph_data_pos++] = sensor_event.data[axis];
         graph_data_pos %= 127;
-        last_sampling_ts = millis();
-
         request_redraw();
     }
 }
@@ -88,7 +96,15 @@ void SensorView::draw(U8G2 &u8g2) {
         y += 12 + 2;
 
         u8g2.setFont(u8g2_font_glasstown_nbp_tf);
-        u8g2.setCursor(8, y); u8g2.printf("TS: %d", sensor_event.timestamp); y += 12;
+
+        static unsigned long last_ts = 0;
+        u8g2.setCursor(8, y);
+        u8g2.printf(
+            "TS: %d, dTS = %d",
+            sensor_event.timestamp,
+            sensor_event.timestamp - last_ts
+        ); y += 12;
+        last_ts = sensor_event.timestamp;
 
         if(!multi_axis) {
             u8g2.setCursor(8, y);

@@ -8,8 +8,6 @@ class BH1750_US : public Adafruit_Sensor {
 private:
     hp_BH1750 &sensor_hw;
     int32_t sensor_id;
-
-    int last_raw = 0;
 public:
     BH1750_US(hp_BH1750 &hw, int32_t id);
 

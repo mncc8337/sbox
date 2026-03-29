@@ -1,7 +1,7 @@
 #include <screen.h>
 #include <bitmap.h>
 
-void Screen::setup() {}
+void Screen::open_callback() {}
 
 bool Screen::is_blocked() {
     return false;
@@ -10,6 +10,8 @@ bool Screen::is_blocked() {
 bool Screen::is_overlay() {
     return false;
 }
+
+void Screen::close_callback() {}
 
 bool Screen::prevent_sleep() {
     return false;

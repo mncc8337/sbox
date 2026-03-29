@@ -14,7 +14,6 @@ RadioMenu::RadioMenu(
       value_map(value_map),
       callback(callback) {
     item_selected = -1;
-
     for(unsigned i = 0; i < items.size(); i++) {
         items[i]->icon = BITMAP_RADIOBUTTON;
     }
@@ -33,14 +32,19 @@ void RadioMenu::process_navigation(
 
     if(button_select_press_duration > 50) {
         radio_state = item_selected;
-        bound_target = value_map[radio_state];
-        redraw_request = true;
-
-        if(callback) callback(value_map[radio_state]);
+        request_redraw();
     }
 }
 
-void RadioMenu::setup() {
+void RadioMenu::draw(U8G2 &u8g2) {
+    Menu::draw(u8g2);
+
+    if(radio_state >= item_sel_previous && radio_state <= item_sel_next) {
+        u8g2.drawXBM(4, 2 + 22 * (radio_state - item_sel_previous), 16, 16, BITMAP_RADIODOT);
+    }
+}
+
+void RadioMenu::open_callback() {
     if(item_selected >= 0) return;
 
     for(radio_state = 0; radio_state < items.size(); radio_state++) {
@@ -56,10 +60,7 @@ void RadioMenu::setup() {
     item_sel_next = item_selected + 1;
 }
 
-void RadioMenu::draw(U8G2 &u8g2) {
-    Menu::draw(u8g2);
-
-    if(radio_state >= item_sel_previous && radio_state <= item_sel_next) {
-        u8g2.drawXBM(4, 2 + 22 * (radio_state - item_sel_previous), 16, 16, BITMAP_RADIODOT);
-    }
+void RadioMenu::close_callback() {
+    bound_target = value_map[radio_state];
+    if(callback) callback(value_map[radio_state]);
 }

@@ -1,4 +1,3 @@
-#include "esp32-hal-log.h"
 #include <ui_layout.h>
 #include <screen.h>
 #include <action.h>
@@ -15,6 +14,7 @@
 #include <preference_keys.h>
 #include <esp_sleep.h>
 #include <esp_log.h>
+#include <mutexes.h>
 
 #include <WiFi.h>
 
@@ -163,24 +163,24 @@ OpenScreenAction open_datalogger_menu("Datalogger", &datalogger_menu);
 
 DummyAction open_sensor_config_menu("Config");
 
-extern CheckBoxMask log_n_send_mask;
-std::vector<DummyAction*> log_n_send_menu_items = {};
-std::vector<unsigned> log_n_send_menu_bit_map = {};
-void log_n_send_callback(CheckBoxMask nmask) {
+extern CheckBoxMask lognsend_mask;
+std::vector<DummyAction*> lognsend_menu_items = {};
+std::vector<unsigned> lognsend_menu_bit_map = {};
+void lognsend_callback(CheckBoxMask nmask) {
     ESP_LOGD("SENSORS", "New log & send mask: 0x%X", nmask);
 }
-CheckBoxMenu log_n_send_menu(
-    log_n_send_menu_items,
-    log_n_send_mask,
-    log_n_send_menu_bit_map,
-    log_n_send_callback,
+CheckBoxMenu lognsend_menu(
+    lognsend_menu_items,
+    lognsend_mask,
+    lognsend_menu_bit_map,
+    lognsend_callback,
     &is_session_running
 );
-OpenScreenAction open_log_n_send_menu("Log & Send", &log_n_send_menu);
+OpenScreenAction open_lognsend_menu("Log & Send", &lognsend_menu);
 
 std::vector<Action*> sensors_menu_items = {
     &open_sensor_config_menu,
-    &open_log_n_send_menu,
+    &open_lognsend_menu,
 };
 Menu sensors_menu(sensors_menu_items, &is_session_running);
 OpenScreenAction open_sensors_menu("Sensors", &sensors_menu);
@@ -242,6 +242,7 @@ OpenScreenAction open_screen_timeout_menu("Screen Timeout", &screen_timeout_menu
 
 void invert_screen_color() {
     static bool screen_inverted = false;
+
     if(!screen_inverted)
         u8g2.sendF("c", 0xA7);
     else
@@ -334,14 +335,13 @@ Menu main_menu(main_menu_items);
 void ui_init() {
     live_data_menu_items.reserve(SENS_COUNT);
 
-    extern sensors_data_t sensors_data;
     for(unsigned i = 0; i < SENS_COUNT; i++) {
         if(!SENSOR_ALIVE(i)) continue;
 
         sensor_t sensor_info;
         sensors[i]->getSensor(&sensor_info);
 
-        SensorView *sensor_view = new SensorView(*sensors[i]);
+        SensorView *sensor_view = new SensorView(i, sensor_info);
         OpenScreenAction *open_sensor_view = new OpenScreenAction(
             std::string(sensor_info.name),
             sensor_view
@@ -349,14 +349,7 @@ void ui_init() {
 
         live_data_menu_items.push_back(open_sensor_view);
 
-        log_n_send_menu_items.push_back(new DummyAction(sensor_info.name));
-        log_n_send_menu_bit_map.push_back(i);
+        lognsend_menu_items.push_back(new DummyAction(sensor_info.name));
+        lognsend_menu_bit_map.push_back(i);
     }
-
-    // setup all screens that have setup() method
-    connectivity_menu.setup();
-    datalogger_menu.setup();
-    screen_brightness_menu.setup();
-    screen_timeout_menu.setup();
-    log_n_send_menu.setup();
 }

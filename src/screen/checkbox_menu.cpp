@@ -13,6 +13,7 @@ CheckBoxMenu::CheckBoxMenu(
 )
     : Menu((std::vector<Action*> &)items, block_flag),
       item_mask(item_mask),
+      item_mask_buffer(item_mask),
       bit_map(bit_map),
       callback(callback) {
 }
@@ -29,20 +30,8 @@ void CheckBoxMenu::process_navigation(
     );
 
     if(button_select_press_duration > 50) {
-        item_mask ^= 1 << item_selected;
-
-        if(callback) callback(item_mask);
+        item_mask_buffer ^= 1 << item_selected;
         redraw_request = true;
-    }
-}
-
-void CheckBoxMenu::setup() {
-    item_selected = 0;
-    item_sel_previous = -1;
-    item_sel_next = 1;
-
-    for(unsigned i = 0; i < items.size(); i++) {
-        items[i]->icon = BITMAP_CHECKBOX;
     }
 }
 
@@ -64,4 +53,19 @@ void CheckBoxMenu::draw(U8G2 &u8g2) {
             );
         }
     }
+}
+
+void CheckBoxMenu::open_callback() {
+    item_selected = 0;
+    item_sel_previous = -1;
+    item_sel_next = 1;
+
+    for(unsigned i = 0; i < items.size(); i++) {
+        items[i]->icon = BITMAP_CHECKBOX;
+    }
+}
+
+void CheckBoxMenu::close_callback() {
+    item_mask = item_mask_buffer;
+    if(callback) callback(item_mask);
 }

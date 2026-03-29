@@ -23,10 +23,11 @@ public:
         bool button_up_clicked,
         bool button_down_clicked
     ) = 0;
-    virtual void setup();
     virtual void draw(U8G2 &u8g2) = 0;
     virtual bool is_blocked();
     virtual bool is_overlay();
+    virtual void open_callback();
+    virtual void close_callback();
     virtual bool prevent_sleep();
     void request_redraw();
 };
@@ -59,7 +60,7 @@ public:
 
 class SensorView: public Screen {
 private:
-    Adafruit_Sensor &sensor;
+    int sensor_id;
 
     char sensor_name[32];
     int32_t sensor_type;
@@ -67,25 +68,24 @@ private:
     float min_sensor_value;
     bool multi_axis;
 
-    sensors_event_t sensor_event;
-
     bool graph_screen = false;
     float graph_data[127];
     unsigned graph_data_pos = 0;
     unsigned axis = 0;
     bool auto_scaling = false;
 
+    sensors_event_t sensor_event = {0};
+
     unsigned long sample_interval_ms = 40;
     unsigned long last_sampling_ts = 0;
 public:
-    SensorView(Adafruit_Sensor &sensor);
+    SensorView(int sensor_id, sensor_t &sensor_info);
     void process_navigation(
         unsigned long button_select_press_duration,
         bool button_up_clicked,
         bool button_down_clicked
     ) override;
     void draw(U8G2 &u8g2) override;
-
     bool prevent_sleep() override;
 };
 
@@ -128,12 +128,14 @@ public:
         bool button_up_clicked,
         bool button_down_clicked
     ) override;
-    void setup() override;
     void draw(U8G2 &u8g2) override;
+    void open_callback() override;
+    void close_callback() override;
 };
 
 class CheckBoxMenu: public Menu {
 private:
+    CheckBoxMask item_mask_buffer;
     CheckBoxMask &item_mask;
     std::vector<unsigned> &bit_map;
     void (*callback)(CheckBoxMask new_val);
@@ -151,8 +153,9 @@ public:
         bool button_up_clicked,
         bool button_down_clicked
     ) override;
-    void setup() override;
     void draw(U8G2 &u8g2) override;
+    void open_callback() override;
+    void close_callback() override;
 };
 
 class InfoScreen : public Screen {

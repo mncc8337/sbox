@@ -6,6 +6,7 @@
 
 #include <esp_sleep.h>
 #include <esp_log.h>
+#include <mutexes.h>
 
 #include <bitmap.h>
 #include <sensors.h>
@@ -31,12 +32,12 @@
 
 Preferences preferences;
 
-bool is_session_running = false;
+volatile bool is_session_running = false;
 
-bool is_datalogger_enabled;
+volatile bool is_datalogger_enabled;
 
-bool is_telemetry_enabled;
-TelemetryType telemetry_type;
+volatile bool is_telemetry_enabled;
+volatile TelemetryType telemetry_type;
 
 bool sleep_lock = false;
 bool screen_off = false;
@@ -64,8 +65,10 @@ void open_screen(Screen *screen, bool forced=false) {
         open_notification("This menu is\nnot available\nright now");
         return;
     }
+    current_screen->close_callback();
     screen_stack[screen_stack_ptr++] = current_screen;
     current_screen = screen;
+    current_screen->open_callback();
     current_screen->request_redraw();
 
     sleep_lock = current_screen->prevent_sleep();
@@ -78,7 +81,9 @@ void open_screen(Screen *screen, bool forced=false) {
 }
 void open_prev_screen() {
     if(!screen_stack_ptr) return;
+    current_screen->close_callback();
     current_screen = screen_stack[--screen_stack_ptr];
+    current_screen->open_callback();
     current_screen->request_redraw();
     ESP_LOGD("UI", "Screen 0x%X opened", current_screen);
 }
@@ -172,8 +177,6 @@ void update_battery_readings() {
 
     psu_voltage_avg = psu_voltage_sum / VOLTAGE_HISTORY_SIZE;
 
-    ESP_LOGD("BATTERY", "New battery reading: avg %dmV, raw %dmV", psu_voltage_avg, raw);
-
     if(psu_voltage_avg >= 4150) {
         battery_percentage = 100;
     } else if(psu_voltage_avg > 3750) {
@@ -216,7 +219,7 @@ void setup() {
 
     u8g2.begin();
 
-    if(init_sensors() != (1 << SENS_COUNT) - 1) {
+    if(sensors_init() != (1 << SENS_COUNT) - 1) {
         u8g2.clearBuffer();
         u8g2.setFont(u8g2_font_4x6_tf);
         u8g2.setCursor(0, 5); u8g2.printf("failed to init some sensors");
@@ -257,6 +260,9 @@ void setup() {
     ui_init();
     ESP_LOGI("SYSTEM", "UI initialized");
 
+    // now start all system tasks
+    xTaskCreate(sensors_task, "SensorPollingTask", 4096, NULL, 1, NULL);
+
     // load splash gif for fun
     u8g2.setBitmapMode(0);
     for(unsigned i = 0; i < BITMAP_SPLASH_LEN * 5; i++) {
@@ -289,22 +295,24 @@ void loop() {
     }
 
     if(current_ts - last_sensor_update_ts > 10 && is_session_running) {
-        sensors_data_t sensors_data;
-        get_sensors_data(sensors_data);
-        
-        switch(telemetry_type) {
-            case BLE_BEACON: {
-                ble_beacon_set_data(sensors_data);
-                break;
-            }
-            case BLE_SERVER: {
-                ble_server_update(sensors_data, battery_percentage);
-                break;
-            }
-            default:;
-        }
+        last_sensor_update_ts = current_ts;
 
-        ESP_LOGI("TELEMETRY", "New telemetry packet sent");
+        sensors_data_t sensors_data;
+        if(all_data_poll_ready(sensors_data)) {
+            switch(telemetry_type) {
+                case BLE_BEACON: {
+                    ble_beacon_set_data(sensors_data);
+                    break;
+                }
+                case BLE_SERVER: {
+                    ble_server_update(sensors_data, battery_percentage);
+                    break;
+                }
+                default:;
+            }
+
+            ESP_LOGI("TELEMETRY", "New telemetry packet sent");
+        }
     }
 
     static bool button_up_clicked = false;
