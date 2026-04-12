@@ -101,6 +101,8 @@ void open_prev_screen() {
 void shutdown() {
     ESP_LOGI("SYSTEM", "Shutting down");
 
+    u8g2.setPowerSave(1);
+
     Wire.end();
 
     pinMode(SDA_PIN, INPUT);
