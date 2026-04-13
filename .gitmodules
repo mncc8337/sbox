@@ -1,0 +1,3 @@
+[submodule "lib/BMI160-Arduino"]
+	path = lib/BMI160-Arduino
+	url = https://github.com/mncc8337/BMI160-Arduino.git
